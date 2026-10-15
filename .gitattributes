@@ -1,0 +1,2 @@
+# A patch with Windows line ends no longer applies to the sources it was made from.
+*.patch -text

@@ -1,0 +1,19 @@
+# CMake build trees and the built exes
+/build/
+/bin/
+
+# The client's build output and packages
+/client/dist/
+/client/node_modules/
+/client/*.tgz
+
+# Local notes for agents
+CLAUDE.md
+AGENTS.md
+
+# Editor and OS files
+.vs/
+.vscode/
+*.user
+Thumbs.db
+.DS_Store

@@ -1,0 +1,26 @@
+{
+    "name": "rant-client",
+    "version": "0.0.1",
+    "description": "The Rant client: one node on a Rant mesh, through the Rant bridge",
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/rant.d.ts",
+            "default": "./dist/rant.js"
+        },
+        "./video": {
+            "types": "./dist/video.d.ts",
+            "default": "./dist/video.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p .",
+        "check": "tsc -p . --noEmit && tsc -p ../tests/client --noEmit"
+    },
+    "devDependencies": {
+        "typescript": "^5.9.0"
+    }
+}

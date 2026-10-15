@@ -1,0 +1,17 @@
+# MbedTLS is fetched and built in this tree, never looked up on the system. This maps the
+# imported targets libdatachannel wants and the variables libSRTP wants onto the fetched ones.
+if(NOT TARGET mbedtls)
+  message(FATAL_ERROR "FindMbedTLS: the fetched mbedtls target is missing (fetch it first)")
+endif()
+foreach(_pair "MbedTLS;mbedtls" "MbedCrypto;mbedcrypto" "MbedX509;mbedx509")
+  list(GET _pair 0 _name)
+  list(GET _pair 1 _target)
+  if(NOT TARGET MbedTLS::${_name})
+    add_library(MbedTLS::${_name} INTERFACE IMPORTED)
+    target_link_libraries(MbedTLS::${_name} INTERFACE ${_target})
+  endif()
+endforeach()
+get_target_property(MBEDTLS_INCLUDE_DIRS mbedtls INTERFACE_INCLUDE_DIRECTORIES)
+set(MBEDTLS_LIBRARIES mbedtls mbedx509 mbedcrypto)
+set(MbedTLS_FOUND TRUE)
+set(MbedTLS_VERSION "3.6.4")

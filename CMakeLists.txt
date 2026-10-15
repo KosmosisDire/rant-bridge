@@ -24,6 +24,16 @@ endforeach()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/get_cpm.cmake")
 
+# CPM patches with the first patch on PATH. On Windows that can be Strawberry Perl's old one,
+# which crashes on ours, so take the one Git ships.
+if(CMAKE_HOST_WIN32 AND NOT PATCH_EXECUTABLE)
+  find_package(Git QUIET)
+  if(GIT_EXECUTABLE)
+    get_filename_component(git_dir "${GIT_EXECUTABLE}" DIRECTORY)
+    find_program(PATCH_EXECUTABLE patch HINTS "${git_dir}/../usr/bin" "${git_dir}/../../usr/bin" NO_DEFAULT_PATH)
+  endif()
+endif()
+
 # A release pins the newest Rant. The local presets set CPM_rant_SOURCE to ../rant.
 CPMAddPackage(NAME rant
   GITHUB_REPOSITORY KosmosisDire/Rant

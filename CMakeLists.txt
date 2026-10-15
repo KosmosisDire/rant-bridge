@@ -45,6 +45,10 @@ CPMAddPackage(NAME rant
 # so they all build against the same runtime. Linux stays dynamic: ICE resolves STUN host
 # names, which a static glibc cannot do.
 include("${rant_SOURCE_DIR}/tools/static_runtime.cmake")
+# libstdc++ and libgcc go inside the Linux exe too, so it needs only a glibc as old as the build's.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_link_options(-static-libstdc++ -static-libgcc)
+endif()
 
 # TLS and zlib off: the bridge sits behind a tunnel or on localhost, and raw speed matters.
 # The patch lets a connection read while it sends: unpatched, a steady stream toward a client

@@ -11,14 +11,17 @@ permissions:
   contents: write
 
 jobs:
+  # Linux builds in the manylinux_2_28 container, as Rant's wheels do, so the bridge runs on any
+  # glibc since 2.28. The macos preset targets macOS 11.
   build:
     name: build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  preset: linux,   name: linux-x64 }
+          - { os: ubuntu-latest,  preset: linux,   name: linux-x64, container: 'quay.io/pypa/manylinux_2_28_x86_64' }
           - { os: windows-latest, preset: windows, name: win-x64 }
           - { os: macos-15,       preset: macos,   name: osx-arm64 }
     steps:
@@ -29,9 +32,11 @@ jobs:
         shell: bash
         run: test "v$(cat VERSION)" = "$GITHUB_REF_NAME"
 
-      - name: Ninja
+      - name: CMake and Ninja
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y ninja-build
+        run: |
+          /opt/python/cp312-cp312/bin/pip install cmake ninja
+          echo /opt/python/cp312-cp312/bin >> "$GITHUB_PATH"
 
       - name: Ninja
         if: runner.os == 'macOS'
@@ -59,6 +64,24 @@ jobs:
           name: rant-bridge-${{ matrix.name }}
           path: out/*
 
+  # The Linux bridge must start on the oldest and newest distributions people run.
+  check-linux:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: rant-bridge-linux-x64
+          path: bin
+
+      - name: The bridge starts everywhere
+        run: |
+          chmod +x bin/*
+          for image in rockylinux:8 debian:10 ubuntu:20.04 ubuntu:22.04 ubuntu:24.04; do
+            echo "== $image"
+            docker run --rm -v "$PWD/bin:/b" "$image" sh -c               'b=$(ls /b/rant-bridge-*) && $b --version && $b --init-config --config /tmp/b.yaml && { timeout 3 $b --config /tmp/b.yaml 2>&1 || true; } | grep -q listening'
+          done
+
   client:
     runs-on: ubuntu-latest
     steps:
@@ -82,7 +105,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build, client]
+    needs: [build, check-linux, client]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8

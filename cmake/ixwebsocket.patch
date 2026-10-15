@@ -1,3 +1,18 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3c749ef..55b2d60 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -255,7 +255,9 @@ if (USE_ZLIB)
+ endif()
+ 
+ if (WIN32)
+-  target_link_libraries(ixwebsocket PRIVATE wsock32 ws2_32 shlwapi)
++  # Rant bridge: no wsock32. Linked ahead of ws2_32 it takes every socket call in the program,
++  # and its WinSock 1 setsockopt reads WinSock 2 option numbers wrong (IP_MULTICAST_IF)
++  target_link_libraries(ixwebsocket PRIVATE ws2_32 shlwapi)
+   target_compile_definitions(ixwebsocket PRIVATE _CRT_SECURE_NO_WARNINGS)
+ 
+   if (USE_TLS)
 diff --git a/ixwebsocket/IXSocket.cpp b/ixwebsocket/IXSocket.cpp
 index af604fa..f05eb31 100644
 --- a/ixwebsocket/IXSocket.cpp

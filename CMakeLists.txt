@@ -51,13 +51,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # TLS and zlib off: the bridge sits behind a tunnel or on localhost, and raw speed matters.
-# The patch lets a connection read while it sends: unpatched, a steady stream toward a client
-# holds back everything that client sends, its commands included.
+# The patch lets a connection read while it sends, and drops wsock32, which would take Rant's
+# socket calls on Windows and break its multicast.
 CPMAddPackage(NAME ixwebsocket
   URL https://github.com/machinezone/IXWebSocket/archive/refs/tags/v12.0.1.tar.gz
   VERSION 12.0.1
   EXCLUDE_FROM_ALL YES
-  PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ixwebsocket-read-while-sending.patch"
+  PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ixwebsocket.patch"
   OPTIONS "USE_TLS OFF" "USE_ZLIB OFF" "IXWEBSOCKET_INSTALL OFF")
 
 CPMAddPackage(NAME nlohmann_json

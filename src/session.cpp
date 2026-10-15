@@ -745,9 +745,10 @@ void Session::op_peers(const json& seq) {
     json arr = json::array();
     for (const rant::Peer& p : node_->reflection().peers()) {
         json mesh = { {"us", p.rtt_us}, {"jitter_us", p.rtt_jitter_us}, {"samples", p.rtt_samples} };
-        /* the client's view: its own hop to the bridge comes on top */
-        json full = { {"us", p.rtt_us + link_us}, {"jitter_us", p.rtt_jitter_us + link_jitter},
-                      {"samples", std::min(p.rtt_samples, samples)} };
+        /* the client's view: its own hop to the bridge on top of a measured one, never alone */
+        json full = p.rtt_samples ? json{ {"us", p.rtt_us + link_us}, {"jitter_us", p.rtt_jitter_us + link_jitter},
+                                          {"samples", std::min(p.rtt_samples, samples)} }
+                                  : mesh;
         arr.push_back({ {"id", p.id}, {"name", p.name}, {"address", p.address}, {"active", p.active},
                         {"last_heard_us", p.last_heard_us}, {"rtt", full}, {"mesh_rtt", mesh}, {"missed", missed} });
     }

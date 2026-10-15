@@ -2,6 +2,7 @@
  * VS Code webviews, Electron windows). Importing it gives VideoFrame and Image values decode(). */
 
 import { Handle, RantError, Subscriber, Variable, media } from "./node.js";
+import type { VideoFrameValue } from "./schema.js";
 
 type Value = Record<string, any>;
 
@@ -23,16 +24,20 @@ function codecString(codec: string, data: Uint8Array): string {
     return "av01.0.08M.08";
 }
 
-/* One stream's decoder. Once anything asked, every frame of the stream goes through it, since
- * a frame that only holds changes needs the frames before it. */
-class Stream {
-    active = false;
+/* Decodes one stream of VideoFrame values, fed every frame in order, since a frame that only
+ * holds changes needs the frames before it. Each picture is closed for you when the next one
+ * arrives. A subscriber's values decode through one of these by themselves. */
+export class FrameDecoder {
+    /** @internal */ active = false;
+    /* Why frames do not decode, such as a codec this engine lacks. Empty while they do. */
+    error = "";
     private decoder: VideoDecoder | null = null;
     private codec = "";
     private waiting: ((f: VideoFrame | null) => void)[] = [];
     private shown: VideoFrame | null = null;
 
-    feed(v: Value): Promise<VideoFrame | null> {
+    /* The frame's picture, null until a keyframe opened the stream. */
+    decode(v: VideoFrameValue | Value): Promise<VideoFrame | null> {
         this.active = true;
         const data: Uint8Array = v.data;
         if (!data?.length) return Promise.resolve(null);
@@ -44,7 +49,11 @@ class Stream {
             this.decoder?.close();
             const d: VideoDecoder = new VideoDecoder({
                 output: (f) => this.out(f),
-                error: () => { if (this.decoder === d) this.decoder = null; for (const w of this.waiting.splice(0)) w(null); },
+                error: (e) => {
+                    this.error = `${v.codec} does not decode here: ${e.message}`;
+                    if (this.decoder === d) this.decoder = null;
+                    for (const w of this.waiting.splice(0)) w(null);
+                },
             });
             d.configure({ codec, optimizeForLatency: true, ...(v.width && v.height ? { codedWidth: v.width, codedHeight: v.height } : {}) });
             this.decoder = d;
@@ -64,6 +73,7 @@ class Stream {
     }
     /* the previous picture is closed for you as the next one arrives */
     private out(f: VideoFrame): void {
+        this.error = "";
         this.shown?.close();
         this.shown = f;
         this.waiting.shift()?.(f);
@@ -71,7 +81,7 @@ class Stream {
     close(): void { this.decoder?.close(); this.shown?.close(); this.shown = null; }
 }
 
-const streams = new WeakMap<Handle, Map<string, Stream>>();
+const streams = new WeakMap<Handle, Map<string, FrameDecoder>>();
 const listeners = new WeakMap<Handle, Set<(v: Value, field: string[], type: string) => void>>();
 
 const at = (v: any, path: string[]) => path.reduce((o, k) => (o == null ? o : o[k]), v);
@@ -87,10 +97,10 @@ media.attach = (value: unknown, handle: Handle, publisher: number) => {
         else {
             const key = `${m.wire}|${publisher}`;
             let s = byKey.get(key);
-            if (!s) { s = new Stream(); byKey.set(key, s); }
+            if (!s) { s = new FrameDecoder(); byKey.set(key, s); }
             const st = s;
-            const feeding = st.active ? st.feed(v) : null;
-            Object.defineProperty(v, "decode", { value: () => feeding ?? st.feed(v), enumerable: false });
+            const feeding = st.active ? st.decode(v) : null;
+            Object.defineProperty(v, "decode", { value: () => feeding ?? st.decode(v), enumerable: false });
         }
         for (const l of listeners.get(handle) ?? []) l(v, m.path, m.type);
     }

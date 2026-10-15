@@ -177,7 +177,8 @@ json Session::open(const json& req) {
     o.send_buffer_bytes = req.value("send_buffer_bytes", 0u);
     o.announce_interval = milliseconds(req.value("announce_interval_ms", 0));
     o.peer_timeout = milliseconds(req.value("peer_timeout_ms", 0));
-    o.max_peers = (uint16_t)req.value("max_peers", 0);
+    /* one bridge holds many nodes and each sees all its siblings, so Rant's 16 fills before the LAN does */
+    o.max_peers = (uint16_t)req.value("max_peers", 256);
     probe_ms_ = std::max(10u, req.value("probe_interval_ms", 250u));
 
     std::string name = req.value("name", std::string());

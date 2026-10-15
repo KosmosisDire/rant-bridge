@@ -32,7 +32,7 @@ suffix, or microseconds with `_us`.
 | `resume` | The token from an earlier reply, to take that session back. |
 | `name` | The node name. Empty picks `web-xxxxxxxx`. |
 | `probe_interval_ms` | How often the bridge pings this client. Default 250, minimum 10. |
-| Node options | `domain`, `prefix`, `max_topics` (default 64), `fetch_details`, `match_wait_ms`, `disable_shm`, `disable_logs`, `disable_meta`, `disable_error_logs`, `multicast_interface`, `seed_peers`, `unicast_only`, `self_ip`, `advertise_port`, `fragment_size`, `recv_buffer_bytes`, `send_buffer_bytes`, `announce_interval_ms`, `peer_timeout_ms`, `max_peers` |
+| Node options | `domain`, `prefix`, `max_topics` (default 64), `fetch_details`, `match_wait_ms`, `disable_shm`, `disable_logs`, `disable_meta`, `disable_error_logs`, `multicast_interface`, `seed_peers`, `unicast_only`, `self_ip`, `advertise_port`, `fragment_size`, `recv_buffer_bytes`, `send_buffer_bytes`, `announce_interval_ms`, `peer_timeout_ms`, `max_peers` (default 256) |
 
 Reply:
 

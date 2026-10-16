@@ -52,7 +52,7 @@ async function client() {
     const node = await RantNode.connect(bridge, { passphrase, name: "bench-client", domain, transport, matchWaitMs: -1,
                                                   recvBufferBytes: 8 << 20, sendBufferBytes: 8 << 20, disableShm: true });
     bench.carrier = node.connection.carrier;
-    const opts = { reliable, queueBytes: 8 << 20, ...(size > 1350 ? { maxMessageBytes: size } : {}) };
+    const opts = { reliable, keepLast: 64, queueBytes: 8 << 20, ...(size > 1350 ? { maxMessageBytes: size } : {}) };
 
     if (mode === "idle") {
         const seconds = Number(option("--seconds", "10"));

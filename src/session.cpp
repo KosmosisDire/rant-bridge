@@ -293,7 +293,7 @@ bool Session::carrier(uint16_t id, const std::string& frame) {
 }
 
 void Session::deliver(Entity& e, const Codec& codec, Outgoing m, rant::Bytes data, bool video) {
-    if (codec.typed() && data.size()) {
+    if (codec.typed() && !e.raw && data.size()) {
         int skip = -1;
         if (video) {
             std::shared_ptr<Rtc> rtc;
@@ -489,6 +489,7 @@ static rant::Qos topic_qos(const json& req) {
 json Session::schemas(Entity& e, bool reflect) {
     json r = { {"id", e.id}, {"reliable", e.reliable} };
     if (reflect) r["reflected"] = e.value.typed() || e.req.typed();
+    if (e.raw) r["raw"] = true;
     switch (e.kind) {
     case Entity::Pub: case Entity::Sub: case Entity::VarDef: case Entity::VarRemote:
         r["schema"] = schema_block(e.value);
@@ -518,6 +519,7 @@ void Session::op_create(const json& req, const json& seq) {
     Entity* ent = e.get();
     e->id = (uint16_t)id;
     e->name = name;
+    e->raw = req.value("raw", false);
 
     rant::FunctionOptions fo;
     fo.timeout = milliseconds(req.value("timeout_ms", 0));
@@ -852,7 +854,7 @@ void Session::on_binary(const uint8_t* p, size_t n) {
     else if (f.op == OpCall) codec = &e->req;
     std::vector<uint8_t> bytes;
     rant::Bytes payload((const uint8_t*)whole.data(), whole.size());
-    if (codec && codec->typed() && !whole.empty()) {
+    if (codec && codec->typed() && !e->raw && !whole.empty()) {
         cbor::Item v; std::string err;
         if (!cbor::parse(whole, v, err) || !codec->decode(v, bytes, err)) {
             event({ {"event", "send_error"}, {"id", f.id}, {"error", err} });
@@ -943,7 +945,7 @@ void Session::on_result(const Frame& f, rant::Bytes payload) {
         }
     }
     std::vector<uint8_t> bytes; std::string err;
-    if (e && !decode_with(e->rsp, payload, bytes, err)) {
+    if (e && !decode_with(e->raw ? Codec() : e->rsp, payload, bytes, err)) {
         event({ {"event", "send_error"}, {"id", f.id}, {"error", err} });
         if (d.valid()) d.fail("the reply did not match the response schema: " + err);
         else tk->pt.fail("the reply did not match the response schema: " + err);
@@ -969,7 +971,7 @@ void Session::on_progress(const Frame& f, rant::Bytes payload) {
     }
     auto e = find(tk->entity);
     std::vector<uint8_t> bytes; std::string err;
-    if (e && !decode_with(e->prg, payload, bytes, err)) {
+    if (e && !decode_with(e->raw ? Codec() : e->prg, payload, bytes, err)) {
         event({ {"event", "send_error"}, {"id", tk->entity}, {"error", err} });
         return;
     }

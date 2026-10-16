@@ -42,14 +42,16 @@ export interface TopicOptions {
     reliable?: boolean; keepLast?: number; catchUp?: number; maxMessageBytes?: number;
     heartbeatMs?: number; repairDelayMs?: number; backpressureWaitMs?: number; shmMaxBytes?: number;
     queueBytes?: number; maxRateHz?: number; noTimestamp?: boolean; reflect?: boolean;
+    /* typed, yet values stay Rant's wire bytes both ways: for a client that has Rant itself */
+    raw?: boolean;
 }
-export interface FunctionOptions { timeoutMs?: number; backpressureWaitMs?: number; keepLast?: number; reflect?: boolean }
+export interface FunctionOptions { timeoutMs?: number; backpressureWaitMs?: number; keepLast?: number; reflect?: boolean; raw?: boolean }
 export interface TaskOptions extends FunctionOptions {
     progressBestEffort?: boolean; progressKeepLast?: number; noCancel?: boolean; exclusive?: boolean; multi?: boolean;
 }
 export interface VariableOptions<T> {
     initial?: T; readOnly?: boolean; allowForce?: boolean; catchUp?: number; keepLast?: number;
-    backpressureWaitMs?: number; onWrite?: boolean; reflect?: boolean;
+    backpressureWaitMs?: number; onWrite?: boolean; reflect?: boolean; raw?: boolean;
 }
 
 export type CallStatus = "ok" | "app_error" | "no_handler" | "timeout" | "peer_lost" | "cancelled" | "no_provider";
@@ -121,11 +123,11 @@ export class Codec {
     private names: Rename;
     readonly media: { path: string[]; wire: string; type: string }[] = [];
 
-    constructor(block: any, shape: Shape | undefined) {
+    constructor(block: any, shape: Shape | undefined, raw = false) {
         this.block = block ? toBlock(block) : null;
-        this.typed = !!block;
-        this.names = this.block ? renamer(shape, this.block.fields) : null;
-        if (!this.block) return;
+        this.typed = !!block && !raw;
+        this.names = this.typed ? renamer(shape, this.block!.fields) : null;
+        if (!this.typed || !this.block) return;
         if (this.block.name === "VideoFrame" || this.block.name === "Image") this.media.push({ path: [], wire: "", type: this.block.name });
         for (const r of this.block.fields)
             if (r.named === "VideoFrame" || r.named === "Image") this.media.push({ path: this.mine(r.path), wire: r.path, type: r.named });
@@ -191,6 +193,8 @@ export abstract class Handle {
     /** @internal */ rsp!: Codec;
     /** @internal */ reflected = false;
     /** @internal */ reliable = true;
+    /* the bridge keeps this handle's values as Rant wire bytes, see TopicOptions.raw */
+    raw = false;
 
     /** @internal */
     constructor(readonly node: RantNode, readonly id: number, readonly name: string,
@@ -200,10 +204,11 @@ export abstract class Handle {
     /** @internal */ retype(r: any): void {
         this.reliable = !!r.reliable;
         this.reflected = !!r.reflected;
-        this.value = new Codec(r.schema, this.shapes.value);
-        this.req = new Codec(r.req, this.shapes.req);
-        this.prg = new Codec(r.prg, this.shapes.prg);
-        this.rsp = new Codec(r.rsp, this.shapes.rsp);
+        this.raw = !!r.raw;
+        this.value = new Codec(r.schema, this.shapes.value, this.raw);
+        this.req = new Codec(r.req, this.shapes.req, this.raw);
+        this.prg = new Codec(r.prg, this.shapes.prg, this.raw);
+        this.rsp = new Codec(r.rsp, this.shapes.rsp, this.raw);
     }
     /** @internal */ frame(_f: Frame, _payload: Uint8Array): void {}
 

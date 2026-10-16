@@ -92,6 +92,8 @@ Makes one entity. The client picks its `id`, 1 to 65534, used by every frame aft
 
 - Schemas are Rant schema text. An empty schema with `reflect: true` takes the type from the
   mesh. An empty schema without it sends raw bytes.
+- `raw: true` keeps a typed entity's values as Rant wire bytes both ways, for a client that
+  has Rant itself (the web explorer). The reply says `raw: true` when the bridge honours it.
 - Topic QoS: `reliable`, `keep_last`, `catch_up`, `max_message_bytes`, `heartbeat_ms`,
   `repair_delay_ms`, `backpressure_wait_ms`, `shm_max_bytes`, `queue_bytes`, `max_rate_hz`,
   `no_timestamp`.

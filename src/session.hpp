@@ -41,6 +41,7 @@ struct Entity {
     std::optional<rant::VariableDefinition<rant::Bytes>> vardef;
     std::optional<rant::RemoteVariable<rant::Bytes>> varrem;
     Codec value, req, prg, rsp;
+    bool raw = false;              /* typed, yet values stay Rant wire bytes both ways */
     int last_match = -1;           /* packed count*2 + ready, the last one pushed */
     bool delayed = false;          /* a queue_delay warning is out for it */
 

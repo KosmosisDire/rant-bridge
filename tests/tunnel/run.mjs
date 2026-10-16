@@ -29,7 +29,7 @@ const DOMAIN = "160";
 const HTTP = 8095, BRIDGE = 7490, CDP = 9333;
 const exe = (p) => (process.platform === "win32" ? p + ".exe" : p);
 const benchExe = join(rantWeb, "bin", exe("rant_web_bench"));
-const bridgeExe = join(bridgeRoot, "bin", exe("rant-bridge"));
+const bridgeExe = process.env.BRIDGE_EXE ?? join(bridgeRoot, "bin", exe("rant-bridge"));
 const chrome = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const procs = [];
@@ -80,8 +80,12 @@ function serve() {
 function startBridge() {
     const dir = mkdtempSync(join(tmpdir(), "tunnel-bench-"));
     const config = join(dir, "bridge.yaml");
-    writeFileSync(config, `port: ${BRIDGE}\nbind: 127.0.0.1\npassphrase: bench\nwebrtc: true\n`);
-    return start(bridgeExe, ["--config", config], "bridge");
+    /* sessions outlive the run: reaping a WebRTC session after its grace crashes the bridge
+       (a bug of the released bridges too), which would end the matrix */
+    writeFileSync(config, `port: ${BRIDGE}\nbind: 127.0.0.1\npassphrase: bench\nwebrtc: true\ngrace_ms: ${process.env.GRACE_MS ?? 3600000}\n`);
+    const p = start(bridgeExe, ["--config", config], "bridge");
+    p.on("exit", (code) => console.error(`the bridge exited with ${code}`));
+    return p;
 }
 
 class Cdp {

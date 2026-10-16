@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <random>
 
 namespace bridge {
@@ -148,6 +149,7 @@ Session::~Session() {
         tasks = std::move(parked_tasks_);
     }
     { std::lock_guard<std::mutex> g(ws_mu_); ws_ = nullptr; }
+    tunnel_.reset();    /* its thread delivers into this session, so it stops first */
     rtc.reset();
     /* answer what waits on the client while the node is alive, so callers hear it now */
     for (auto& kv : parked) kv.second.fail("the bridge client went away");
@@ -157,6 +159,15 @@ Session::~Session() {
 }
 
 json Session::open(const json& req) {
+    probe_ms_ = std::max(10u, req.value("probe_interval_ms", 250u));
+    if (req.value("tunnel", false)) {
+        /* the client runs its own node and borrows this host's sockets */
+        name_ = req.value("name", std::string("tunnel"));
+        tunnel_ = std::make_unique<Tunnel>([this](uint16_t sock, const uint8_t ip[4], uint16_t port, const uint8_t* d, size_t n) {
+            to_client_udp(sock, ip, port, d, n);
+        });
+        return reopen_reply();
+    }
     rant::NodeOptions o;
     o.domain = (uint16_t)req.value("domain", 0);
     o.prefix = req.value("prefix", std::string());
@@ -211,8 +222,29 @@ json Session::open(const json& req) {
     return reopen_reply();
 }
 
+static std::string dotted(uint32_t naddr) {
+    const uint8_t* b = (const uint8_t*)&naddr;
+    return std::to_string(b[0]) + "." + std::to_string(b[1]) + "." + std::to_string(b[2]) + "." + std::to_string(b[3]);
+}
+
+static uint32_t naddr_of(const std::string& dotted_ip) {
+    uint8_t b[4] = { 0, 0, 0, 0 };
+    unsigned v[4] = { 0, 0, 0, 0 };
+    if (std::sscanf(dotted_ip.c_str(), "%u.%u.%u.%u", &v[0], &v[1], &v[2], &v[3]) == 4)
+        for (int i = 0; i < 4; i++) b[i] = (uint8_t)v[i];
+    uint32_t n;
+    std::memcpy(&n, b, 4);
+    return n;
+}
+
 json Session::reopen_reply() const {
-    return { {"proto", kProtocol}, {"name", name_}, {"webrtc", cfg_.webrtc} };
+    json r = { {"proto", kProtocol}, {"name", name_}, {"webrtc", cfg_.webrtc} };
+    if (tunnel_) {
+        json ifs = json::array();
+        for (const Tunnel::Iface& f : Tunnel::interfaces()) ifs.push_back({ {"addr", dotted(f.addr)}, {"mask", dotted(f.mask)} });
+        r["tunnel"] = { {"interfaces", ifs} };
+    }
+    return r;
 }
 
 void Session::attach(ix::WebSocket* ws) {
@@ -324,7 +356,7 @@ void Session::tick() {
     bool drop = false;
     {
         std::lock_guard<std::mutex> g(mu_);
-        if (!attached_ || !node_) return;
+        if (!attached_) return;
         if (now - link_.last_ping >= milliseconds(probe_ms_)) {
             link_.last_ping = now;
             uint32_t seq = ++link_.next_seq;
@@ -435,6 +467,9 @@ void Session::on_text(const json& req) {
     json seq = req.value("seq", json(0));
     std::string op = req.value("op", "");
     try {
+        if (op == "rtc") { op_rtc(req, seq); return; }
+        if (op.rfind("udp_", 0) == 0) { op_udp(op, req, seq); return; }
+        if (!node_) { reply_error(seq, "a tunnel session has no node, its client runs its own"); return; }
         if (op == "create") op_create(req, seq);
         else if (op == "close") op_close(req, seq);
         else if (op == "refresh") op_refresh(req, seq);
@@ -832,12 +867,60 @@ void Session::op_rtc(const json& req, const json& seq) {
         for (auto& kv : ents_) chans.emplace_back(kv.first, kv.second->reliable);
     }
     for (auto& c : chans) rtc->add_channel(c.first, c.second);
+    if (tunnel_) rtc->add_channel(kTunnelChannel, false);    /* datagrams: unordered, no retransmits */
     reply(seq, r);
+}
+
+/* ---- the tunnel --------------------------------------------------------------------- */
+
+void Session::op_udp(const std::string& op, const json& req, const json& seq) {
+    if (!tunnel_) { reply_error(seq, "this session has a node, not a tunnel"); return; }
+    uint16_t sock = (uint16_t)req.value("sock", 0);
+    if (op == "udp_bind") {
+        uint16_t port = tunnel_->bind(sock, naddr_of(req.value("if", std::string("0.0.0.0"))),
+                                      (uint16_t)req.value("port", 0), req.value("reuse", false));
+        reply(seq, { {"port", port} });
+    } else if (op == "udp_member") {
+        tunnel_->membership(sock, naddr_of(req.value("group", std::string())), naddr_of(req.value("if", std::string("0.0.0.0"))),
+                            req.value("join", true));
+        reply(seq, {});
+    } else if (op == "udp_option") {
+        if (req.contains("ttl")) tunnel_->ttl(sock, req.value("ttl", 1));
+        if (req.contains("loop")) tunnel_->loop(sock, req.value("loop", true));
+        if (req.value("own_groups", false)) tunnel_->own_groups(sock);
+        reply(seq, {});
+    } else if (op == "udp_close") {
+        tunnel_->close(sock);
+        reply(seq, {});
+    } else reply_error(seq, "unknown op '" + op + "'");
+}
+
+/* A datagram from the client's node, out of this host's socket. */
+void Session::on_udp(const uint8_t* p, size_t n) {
+    if (!tunnel_ || n < kUdpHeader) return;
+    heard();
+    uint16_t sock = (uint16_t)(p[2] | (p[3] << 8));
+    uint16_t port = (uint16_t)(p[8] | (p[9] << 8));
+    uint32_t via;
+    std::memcpy(&via, p + 10, 4);
+    tunnel_->send(sock, p + 4, port, via, p + kUdpHeader, n - kUdpHeader);
+}
+
+/* A datagram for the client's node. It is dropped when no carrier has room, as UDP would be. */
+void Session::to_client_udp(uint16_t sock, const uint8_t ip[4], uint16_t port, const uint8_t* data, size_t n) {
+    std::string f(kUdpHeader + n, '\0');
+    f[0] = (char)OpUdp;
+    f[2] = (char)(sock & 0xff); f[3] = (char)(sock >> 8);
+    std::memcpy(&f[4], ip, 4);
+    f[8] = (char)(port & 0xff); f[9] = (char)(port >> 8);
+    std::memcpy(&f[kUdpHeader], data, n);
+    carrier(kTunnelChannel, f);
 }
 
 /* ---- frames from the client --------------------------------------------------------- */
 
 void Session::on_binary(const uint8_t* p, size_t n) {
+    if (n && p[0] == OpUdp) { on_udp(p, n); return; }
     Frame f;
     if (!parse_frame(p, n, f)) return;
     if (f.op == OpPong) { on_pong(f); return; }

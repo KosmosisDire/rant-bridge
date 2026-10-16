@@ -8,6 +8,7 @@
 #include "frame.hpp"
 #include "rtc.hpp"
 #include "sender.hpp"
+#include "tunnel.hpp"
 
 #include "rant.hpp"
 
@@ -107,6 +108,9 @@ private:
     void op_rtc(const nlohmann::json& req, const nlohmann::json& seq);
     void op_cancel(const nlohmann::json& req, const nlohmann::json& seq);
     void op_log_subscribe(const nlohmann::json& req, const nlohmann::json& seq);
+    void op_udp(const std::string& op, const nlohmann::json& req, const nlohmann::json& seq);
+    void on_udp(const uint8_t* p, size_t n);
+    void to_client_udp(uint16_t sock, const uint8_t ip[4], uint16_t port, const uint8_t* data, size_t n);
     nlohmann::json schemas(Entity& e, bool reflect);
 
     void on_call(Entity& e, const Frame& f, rant::Bytes payload);
@@ -119,6 +123,7 @@ private:
     const Config& cfg_;
     std::string token_;
     std::optional<rant::Node> node_;
+    std::unique_ptr<Tunnel> tunnel_;    /* a tunnel session's sockets, which then has no node */
     std::string name_;
     uint32_t probe_ms_ = 250;
 

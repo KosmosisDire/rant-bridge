@@ -164,6 +164,38 @@ map enum`. A variable's current value follows the reply as a VAR frame.
 
 A `msg_lost` with `peer: 0` means the bridge dropped best effort messages for this client.
 
+## Tunnel
+
+A client that runs its own Rant node (Rant built to wasm, `rant/bindings/web`) opens with
+`"tunnel": true`. The bridge opens no node for it and lends it UDP sockets on its host
+instead, so the client's node is a node of that host to the mesh. The bridge never reads
+the datagrams. `client/src/tunnel.ts` is the reference.
+
+- The open reply adds `tunnel: {interfaces: [{addr, mask}]}`, the host's IPv4 interfaces,
+  dotted. The other node and entity ops answer an error.
+- Sockets are numbered by the client, 1 to 65535, at most 16 at once.
+
+| Op | Keys | Reply |
+|---|---|---|
+| `udp_bind` | `sock`, `port` (0 for any), `if` (dotted, default any), `reuse` | `{port}`, the bound port. A bound `sock` is rebound. |
+| `udp_member` | `sock`, `group`, `if`, `join` (default true) | `{}` |
+| `udp_option` | `sock`, any of `ttl`, `loop`, `own_groups` | `{}` |
+| `udp_close` | `sock` | `{}` |
+
+A datagram is one binary message with its own header, both ways:
+
+```
+[u8 9][u8 flags][u16 sock][4 ip][u16 port][4 via][payload]
+```
+
+- `ip` is the destination toward the bridge and the source toward the client, in network
+  byte order. `via` is the interface to send a group datagram out of, 0 for the default,
+  and 0 toward the client. `flags` is 0.
+- Datagrams ride data channel 1, unordered with no retransmits, else the WebSocket. One
+  that finds no room is dropped, as UDP would drop it.
+- The bridge sends only to 239/8, to loopback and to addresses on its host's subnets, so
+  it relays nothing beyond the mesh.
+
 ## Data plane
 
 One frame is one WebSocket binary message or one data channel message.
@@ -256,7 +288,8 @@ lossy links and carries video as media tracks.
 ### Data channels
 
 - Channels are negotiated, so neither side announces them: channel `id` is entity `id`, and
-  channel 0 carries PING and PONG.
+  channel 0 carries PING and PONG. A tunnel session has no entities, and channel 1 carries
+  its datagrams.
 - A reliable entity gets an ordered reliable channel. A best effort one gets an unordered
   channel with no retransmits.
 - Frames are the same as on the WebSocket. Whichever carrier has room takes the frame, so a

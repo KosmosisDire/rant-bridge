@@ -59,7 +59,7 @@ async function client() {
         await node.subscriber("bench/idle", null, () => {}, opts);
         bench.started = performance.now();
         await new Promise((r) => setTimeout(r, seconds * 1000));
-        bench.result = { mode: "idle", seconds, peers: (await node.peers()).length, carrier: node.connection.carrier };
+        bench.result = { mode: "idle", seconds, peers: (await node.reflection.peers()).length, carrier: node.connection.carrier };
         return;
     }
 

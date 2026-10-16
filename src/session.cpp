@@ -138,12 +138,12 @@ Session::Session(const Config& cfg, std::string token) : cfg_(cfg), token_(std::
 }
 
 Session::~Session() {
-    sender_.reset();
     std::shared_ptr<Rtc> rtc;
     std::map<uint32_t, rant::Deferred<rant::Bytes>> parked;
     std::map<uint32_t, std::shared_ptr<ParkedTask>> tasks;
     {
         std::lock_guard<std::mutex> g(mu_);
+        attached_ = false;      /* tick goes quiet while the node closes */
         rtc = std::move(rtc_);
         parked = std::move(parked_);
         tasks = std::move(parked_tasks_);
@@ -155,6 +155,7 @@ Session::~Session() {
     for (auto& kv : parked) kv.second.fail("the bridge client went away");
     for (auto& kv : tasks) kv.second->pt.complete_cancelled("the bridge client went away");
     node_.reset();      /* stops the service thread and says bye before the handles go */
+    sender_.reset();    /* after the node: a message delivered until it closes still goes to the sender */
     ents_.clear();
 }
 

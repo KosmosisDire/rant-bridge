@@ -518,7 +518,7 @@ export class RantNode {
         this.setState("open", "websocket");
         if (resuming && r.resumed) this.emit({ kind: "resumed", text: "the bridge session resumed" });
         if (resuming && !r.resumed) await this.recreate();
-        if (r.webrtc && this.opts.transport !== "websocket") await this.rtcConnect().catch(() => this.rtcDrop());
+        if (r.webrtc && this.opts.transport !== "websocket") await this.rtcConnect().catch(() => {});
     }
 
     /* The bridge lost our session: make every handle again under its old id, with no old sends. */
@@ -819,12 +819,19 @@ export class RantNode {
             pc.onconnectionstatechange = () => {
                 const s = pc.connectionState;
                 if (s === "connected") { clearTimeout(t); this.setState("open", "webrtc"); res(); }
-                else if (s === "failed" || s === "closed") { clearTimeout(t); this.rtcDrop(); rej(new Error("webrtc " + s)); }
+                else if (s === "failed" || s === "closed") { clearTimeout(t); if (this.pc === pc) this.rtcDrop(); rej(new Error("webrtc " + s)); }
                 else if (s === "disconnected") this.setState(this.conn.state, "websocket");
             };
         });
-        await this.offer();
-        await up;
+        /* a failed attempt drops its own link only: a reconnect meanwhile may have started a newer one */
+        try {
+            await this.offer();
+            await up;
+        } catch (e) {
+            up.catch(() => {});
+            if (this.pc === pc) this.rtcDrop();
+            throw e;
+        }
     }
 
     /** @internal */ async offer(): Promise<void> {

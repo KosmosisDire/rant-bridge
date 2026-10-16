@@ -1,6 +1,6 @@
 {
     "name": "rant-client",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "description": "The Rant client: one node on a Rant mesh, through the Rant bridge",
     "type": "module",
     "exports": {

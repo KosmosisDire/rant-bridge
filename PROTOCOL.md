@@ -137,7 +137,7 @@ map enum`. A variable's current value follows the reply as a VAR frame.
 
 | Op | Keys | Reply |
 |---|---|---|
-| `peers` | | `{peers:[{id, name, address, active, last_heard_us, rtt, mesh_rtt, missed}]}` |
+| `peers` | | `{peers:[{id, uuid, name, address, active, epoch, catching_up, fragment_size, last_heard_us, rtt, mesh_rtt, rtt_min_us, missed}]}` |
 | `entities` | | This node's entities |
 | `peer_entities` | `peer` | One peer's entities |
 | `mesh` | | Every entity on the mesh |

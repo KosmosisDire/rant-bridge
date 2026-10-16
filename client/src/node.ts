@@ -88,8 +88,9 @@ export type CancelStatus = "ok" | "no_cancel" | "not_pending" | "error";
 export interface HandleStats { queuedBytes: number; queuedMsgs: number; oldestAgeUs: number; dropped: number; discarded: number }
 
 export interface Peer {
-    id: number; name: string; address: string; active: boolean; lastHeardUs: number;
-    rtt: Rtt; meshRtt: Rtt; missed: number;
+    id: number; uuid: string; name: string; address: string; active: boolean; lastHeardUs: number;
+    epoch: number; catchingUp: boolean; fragmentSize: number;
+    rtt: Rtt; meshRtt: Rtt; rttMinUs: number; missed: number;
 }
 export type EntityKind = "topic" | "function" | "task" | "variable";
 export interface SchemaBlock { name: string; hash: string; dsl: string; fields: SchemaRow[] }
@@ -412,8 +413,9 @@ export class Reflection {
     /* Every discovered peer. rtt includes this client's hop to the bridge, meshRtt does not. */
     async peers(): Promise<Peer[]> {
         const r = await this.node.request({ op: "peers" });
-        return r.peers.map((p: any) => ({ id: p.id, name: p.name, address: p.address, active: p.active,
-            lastHeardUs: p.last_heard_us, rtt: toRtt(p.rtt), meshRtt: toRtt(p.mesh_rtt), missed: p.missed ?? 0 }));
+        return r.peers.map((p: any) => ({ id: p.id, uuid: p.uuid ?? "", name: p.name, address: p.address, active: p.active,
+            lastHeardUs: p.last_heard_us, epoch: p.epoch ?? 0, catchingUp: !!p.catching_up, fragmentSize: p.fragment_size ?? 0,
+            rtt: toRtt(p.rtt), meshRtt: toRtt(p.mesh_rtt), rttMinUs: p.rtt_min_us ?? 0, missed: p.missed ?? 0 }));
     }
     /* What one node offers, 0 for this one. */
     async entities(peer = 0): Promise<MeshEntity[]> {

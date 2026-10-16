@@ -752,8 +752,12 @@ void Session::op_peers(const json& seq) {
         json full = p.rtt_samples ? json{ {"us", p.rtt_us + link_us}, {"jitter_us", p.rtt_jitter_us + link_jitter},
                                           {"samples", std::min(p.rtt_samples, samples)} }
                                   : mesh;
-        arr.push_back({ {"id", p.id}, {"name", p.name}, {"address", p.address}, {"active", p.active},
-                        {"last_heard_us", p.last_heard_us}, {"rtt", full}, {"mesh_rtt", mesh}, {"missed", missed} });
+        char uuid[33];
+        for (size_t i = 0; i < p.uuid.size(); i++) std::snprintf(uuid + i * 2, 3, "%02x", p.uuid[i]);
+        arr.push_back({ {"id", p.id}, {"uuid", uuid}, {"name", p.name}, {"address", p.address}, {"active", p.active},
+                        {"epoch", p.epoch}, {"catching_up", p.catching_up}, {"fragment_size", p.fragment_size},
+                        {"last_heard_us", p.last_heard_us}, {"rtt", full}, {"mesh_rtt", mesh},
+                        {"rtt_min_us", p.rtt_min_us}, {"missed", missed} });
     }
     reply(seq, { {"peers", arr} });
 }

@@ -645,8 +645,20 @@ export class RantNode {
         if (!this.carry(0, pong)) this.ws?.send(pong);
     }
 
-    /* A tunnel datagram, on its unordered channel or the WebSocket. False when neither has room. */
-    /** @internal */ sendUdp(frame: Uint8Array): boolean { return this.carry(TUNNEL_CHANNEL, frame); }
+    /* A batch of tunnel datagrams, on the tunnel channel while it is open, else the WebSocket.
+     * One carrier only, so datagrams keep their order. False past a socket's worth of backlog. */
+    /** @internal */ sendUdp(frame: Uint8Array): boolean {
+        const dc = this.channels.get(TUNNEL_CHANNEL);
+        if (dc && dc.readyState === "open") {
+            if (dc.bufferedAmount > TUNNEL_BACKLOG) return false;
+            dc.send(frame as any);
+            return true;
+        }
+        const ws = this.ws;
+        if (!ws || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > TUNNEL_BACKLOG) return false;
+        ws.send(frame);
+        return true;
+    }
 
     /* The entity's data channel when it is open and has room, else the WebSocket. */
     private carry(id: number, frame: Uint8Array): boolean {
@@ -881,9 +893,10 @@ export class RantNode {
 
 type Val<S> = S extends Schema<any> ? Infer<S> : unknown;
 
-/* A tunnel datagram's op and the data channel it rides, PROTOCOL.md. */
+/* A tunnel batch's op, the data channel it rides, PROTOCOL.md, and the backlog a socket would hold. */
 const UDP = 9;
 const TUNNEL_CHANNEL = 1;
+const TUNNEL_BACKLOG = 4 << 20;
 
 function buildPong(f: Frame): Uint8Array {
     return buildFrame({ ...f, op: Op.Pong, payload: new Uint8Array(0), chunk: undefined });

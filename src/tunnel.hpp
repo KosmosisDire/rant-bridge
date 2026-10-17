@@ -18,9 +18,9 @@ namespace bridge {
 
 class Tunnel {
 public:
-    /* A datagram for the client: its socket, the source address bytes and port. Runs on the
-     * tunnel's own thread. */
-    using Deliver = std::function<void(uint16_t sock, const uint8_t ip[4], uint16_t port, const uint8_t* data, size_t n)>;
+    /* A batch of datagrams for the client, a whole frame (frame.hpp). Runs on the tunnel's own
+     * thread, once for what one wake drained. */
+    using Deliver = std::function<void(const std::string& batch)>;
 
     struct Iface { uint32_t addr, mask; };     /* network byte order */
 

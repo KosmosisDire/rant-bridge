@@ -38,8 +38,11 @@ public:
 
     void add_channel(uint16_t id, bool reliable);
     void remove_channel(uint16_t id);
-    /* false when no channel is open for id, the frame is too big for it, or it is backed up */
-    bool send(uint16_t id, const std::string& frame);
+    /* false when no channel is open for id, the frame is too big for it, or more than limit
+     * bytes wait in it */
+    bool send(uint16_t id, const std::string& frame, size_t limit = 64u << 10);
+    /* a channel for id is open */
+    bool has(uint16_t id);
     bool up() const { return up_; }
 
     /* Sends the VideoFrame at the entity's bound track field. The field to empty in the

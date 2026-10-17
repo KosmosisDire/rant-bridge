@@ -1,4 +1,5 @@
 #include "tunnel.hpp"
+#include "frame.hpp"
 
 #include <cstring>
 #include <stdexcept>
@@ -209,6 +210,12 @@ bool Tunnel::send(uint16_t sock, const uint8_t ip[4], uint16_t port, uint32_t vi
 
 void Tunnel::run() {
     std::vector<uint8_t> buf(64 * 1024);
+    std::string batch;
+    auto flush = [&] {
+        if (batch.size() > 2) deliver_(batch);
+        batch.assign({ (char)OpUdp, 0 });
+    };
+    flush();
     std::vector<pollfd> fds;
     std::vector<std::pair<uint16_t, std::shared_ptr<Sock>>> order;
     while (!stop_) {
@@ -229,16 +236,23 @@ void Tunnel::run() {
         for (size_t i = first; i < fds.size(); i++) {
             if (!(fds[i].revents & POLLIN)) continue;
             auto& [id, s] = order[i - first];
-            for (;;) {    /* drain what is queued, so one wake serves a burst */
+            for (;;) {    /* drain what is queued, so one wake serves a burst in one batch */
                 sockaddr_in from{};
                 socklen_t len = sizeof from;
                 int n = ::recvfrom(s->fd, (char*)buf.data(), (int)buf.size(), 0, (sockaddr*)&from, &len);
                 if (n < 0) break;
-                uint8_t ip[4];
-                std::memcpy(ip, &from.sin_addr.s_addr, 4);
-                deliver_(id, ip, ntohs(from.sin_port), buf.data(), (size_t)n);
+                if (batch.size() + kUdpRecord + (size_t)n > kUdpBatch) flush();
+                uint16_t port = ntohs(from.sin_port);
+                char rec[kUdpRecord] = {};
+                rec[0] = (char)(id & 0xff); rec[1] = (char)(id >> 8);
+                std::memcpy(rec + 2, &from.sin_addr.s_addr, 4);
+                rec[6] = (char)(port & 0xff); rec[7] = (char)(port >> 8);
+                rec[12] = (char)(n & 0xff); rec[13] = (char)(n >> 8);
+                batch.append(rec, kUdpRecord);
+                batch.append((const char*)buf.data(), (size_t)n);
             }
         }
+        flush();
     }
 }
 

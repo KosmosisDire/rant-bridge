@@ -13,10 +13,13 @@ namespace bridge {
 
 enum Op : uint8_t { OpData = 1, OpVar = 2, OpCall = 3, OpResult = 4, OpProgress = 5, OpCancel = 6, OpPing = 7, OpPong = 8, OpUdp = 9 };
 
-/* A tunnel datagram has its own short header: [u8 9][u8 flags][u16 sock][4 ip][u16 port][4 via],
- * the address bytes in network order, then the payload. It rides data channel 1. */
-constexpr size_t   kUdpHeader = 14;
+/* Tunnel datagrams travel batched: [u8 9][u8 flags], then per datagram
+ * [u16 sock][4 ip][u16 port][4 via][u16 len][payload], the address bytes in network order.
+ * A batch rides data channel 1 and stays under kUdpBatch bytes. */
+constexpr size_t   kUdpRecord = 14;
+constexpr size_t   kUdpBatch = 60000;
 constexpr uint16_t kTunnelChannel = 1;
+constexpr size_t   kTunnelBacklog = 4u << 20;     /* what may wait toward a client, as a socket buffer */
 
 constexpr uint8_t kChunkFlag = 0x80;
 constexpr size_t  kHeader = 29;

@@ -182,17 +182,21 @@ the datagrams. `client/src/tunnel.ts` is the reference.
 | `udp_option` | `sock`, any of `ttl`, `loop`, `own_groups` | `{}` |
 | `udp_close` | `sock` | `{}` |
 
-A datagram is one binary message with its own header, both ways:
+Datagrams travel batched, both ways: one binary message carries one or more, up to 60000
+bytes in all.
 
 ```
-[u8 9][u8 flags][u16 sock][4 ip][u16 port][4 via][payload]
+[u8 9][u8 flags]  then per datagram  [u16 sock][4 ip][u16 port][4 via][u16 len][payload]
 ```
 
 - `ip` is the destination toward the bridge and the source toward the client, in network
   byte order. `via` is the interface to send a group datagram out of, 0 for the default,
   and 0 toward the client. `flags` is 0.
-- Datagrams ride data channel 1, unordered with no retransmits, else the WebSocket. One
-  that finds no room is dropped, as UDP would drop it.
+- A side batches what it sends in one go: the client what one task sends, the bridge what
+  one wake of its sockets drained.
+- Batches ride data channel 1 (unordered, no retransmits) while it is open, else the
+  WebSocket, never both at once, so datagrams keep their order. A batch that finds more
+  than 4 MB waiting is dropped, as a full socket drops datagrams.
 - The bridge sends only to 239/8, to loopback and to addresses on its host's subnets, so
   it relays nothing beyond the mesh.
 

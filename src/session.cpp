@@ -164,9 +164,7 @@ json Session::open(const json& req) {
     if (req.value("tunnel", false)) {
         /* the client runs its own node and borrows this host's sockets */
         name_ = req.value("name", std::string("tunnel"));
-        tunnel_ = std::make_unique<Tunnel>([this](uint16_t sock, const uint8_t ip[4], uint16_t port, const uint8_t* d, size_t n) {
-            to_client_udp(sock, ip, port, d, n);
-        });
+        tunnel_ = std::make_unique<Tunnel>([this](const std::string& batch) { to_client_udp(batch); });
         return reopen_reply();
     }
     rant::NodeOptions o;
@@ -896,26 +894,36 @@ void Session::op_udp(const std::string& op, const json& req, const json& seq) {
     } else reply_error(seq, "unknown op '" + op + "'");
 }
 
-/* A datagram from the client's node, out of this host's socket. */
+/* A batch of datagrams from the client's node, each out of this host's socket. */
 void Session::on_udp(const uint8_t* p, size_t n) {
-    if (!tunnel_ || n < kUdpHeader) return;
+    if (!tunnel_) return;
     heard();
-    uint16_t sock = (uint16_t)(p[2] | (p[3] << 8));
-    uint16_t port = (uint16_t)(p[8] | (p[9] << 8));
-    uint32_t via;
-    std::memcpy(&via, p + 10, 4);
-    tunnel_->send(sock, p + 4, port, via, p + kUdpHeader, n - kUdpHeader);
+    for (size_t at = 2; at + kUdpRecord <= n;) {
+        const uint8_t* r = p + at;
+        uint16_t sock = (uint16_t)(r[0] | (r[1] << 8));
+        uint16_t port = (uint16_t)(r[6] | (r[7] << 8));
+        uint32_t via;
+        std::memcpy(&via, r + 8, 4);
+        size_t len = (size_t)(r[12] | (r[13] << 8));
+        if (at + kUdpRecord + len > n) return;
+        tunnel_->send(sock, r + 2, port, via, r + kUdpRecord, len);
+        at += kUdpRecord + len;
+    }
 }
 
-/* A datagram for the client's node. It is dropped when no carrier has room, as UDP would be. */
-void Session::to_client_udp(uint16_t sock, const uint8_t ip[4], uint16_t port, const uint8_t* data, size_t n) {
-    std::string f(kUdpHeader + n, '\0');
-    f[0] = (char)OpUdp;
-    f[2] = (char)(sock & 0xff); f[3] = (char)(sock >> 8);
-    std::memcpy(&f[4], ip, 4);
-    f[8] = (char)(port & 0xff); f[9] = (char)(port >> 8);
-    std::memcpy(&f[kUdpHeader], data, n);
-    carrier(kTunnelChannel, f);
+/* A batch for the client's node, on the tunnel channel while WebRTC is up, else the WebSocket.
+ * One carrier only, so datagrams keep their order, and dropped past a socket's worth of
+ * backlog, as UDP would drop them. */
+void Session::to_client_udp(const std::string& batch) {
+    std::shared_ptr<Rtc> rtc;
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        if (!attached_) return;
+        rtc = rtc_;
+    }
+    if (rtc && rtc->up() && rtc->has(kTunnelChannel)) { rtc->send(kTunnelChannel, batch, kTunnelBacklog); return; }
+    std::lock_guard<std::mutex> g(ws_mu_);
+    if (ws_ && ws_->bufferedAmount() < kTunnelBacklog) ws_->sendBinary(batch);
 }
 
 /* ---- frames from the client --------------------------------------------------------- */

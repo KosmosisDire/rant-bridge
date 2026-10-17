@@ -19,8 +19,12 @@ export interface TunnelOptions {
     onEvent?: (e: RantEvent) => void;
 }
 
-/* What crossed the tunnel, for a benchmark or a status line. */
-export interface TunnelStats { sentPackets: number; sentBytes: number; receivedPackets: number; receivedBytes: number; dropped: number }
+/* What crossed the tunnel, for a benchmark or a status line. Packets are datagrams, batches the
+ * channel messages that carried them. */
+export interface TunnelStats {
+    sentPackets: number; sentBatches: number; sentBytes: number;
+    receivedPackets: number; receivedBatches: number; receivedBytes: number; dropped: number;
+}
 
 interface Sink { deliver(id: number, naddr: number, port: number, bytes: Uint8Array): void }
 
@@ -32,10 +36,11 @@ const naddr = (dotted: string): number => {
 const dotted = (n: number): string => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, n >>> 24].join(".");
 
 const UDP = 9;
-const HEADER = 14;
+const RECORD = 14;        /* [u16 sock][4 ip][u16 port][4 via][u16 len] before each datagram */
+const BATCH = 60000;      /* the most one channel message carries */
 
 export class TunnelNet {
-    readonly stats: TunnelStats = { sentPackets: 0, sentBytes: 0, receivedPackets: 0, receivedBytes: 0, dropped: 0 };
+    readonly stats: TunnelStats = { sentPackets: 0, sentBatches: 0, sentBytes: 0, receivedPackets: 0, receivedBatches: 0, receivedBytes: 0, dropped: 0 };
     private sink: Sink | null = null;
     private nextId = 1;
     private nextSock = 1;
@@ -43,6 +48,12 @@ export class TunnelNet {
     private ids = new Map<number, number>();                                 /* bridge socket to id */
     private spares: { sock: number; port: number }[] = [];
     private ifaces: { addr: number; mask: number }[] = [];
+    /* the batch being filled: what one task sends leaves as one message */
+    private out = new Uint8Array(BATCH);
+    private outView = new DataView(this.out.buffer);
+    private outLen = 2;
+    private outCount = 0;
+    private flushing = false;
 
     private constructor(private readonly link: RantNode, private readonly spareCount: number, private readonly host: string) {}
 
@@ -113,22 +124,41 @@ export class TunnelNet {
         return true;
     }
 
-    /* bytes views wasm memory and is valid only during this call, so it is copied here. */
+    /* bytes views wasm memory and is valid only during this call, so it is copied into the
+     * batch, which leaves once this task is done. */
     send(id: number, bytes: Uint8Array, to: number, port: number): number {
         const s = this.sockets.get(id);
         if (!s?.sock) return -1;
-        const f = new Uint8Array(HEADER + bytes.length);
-        const v = new DataView(f.buffer);
-        f[0] = UDP;
-        v.setUint16(2, s.sock, true);
-        v.setUint32(4, to, true);
-        v.setUint16(8, port, true);
-        v.setUint32(10, s.via, true);
-        f.set(bytes, HEADER);
-        if (!this.link.sendUdp(f)) { this.stats.dropped++; return -1; }
-        this.stats.sentPackets++;
-        this.stats.sentBytes += f.length;
+        if (this.outLen + RECORD + bytes.length > BATCH) this.flush();
+        const o = this.outLen, v = this.outView;
+        v.setUint16(o, s.sock, true);
+        v.setUint32(o + 2, to, true);
+        v.setUint16(o + 6, port, true);
+        v.setUint32(o + 8, s.via, true);
+        v.setUint16(o + 12, bytes.length, true);
+        this.out.set(bytes, o + RECORD);
+        this.outLen += RECORD + bytes.length;
+        this.outCount++;
+        if (!this.flushing) {
+            this.flushing = true;
+            queueMicrotask(() => this.flush());
+        }
         return bytes.length;
+    }
+
+    /* Sends the batch. A carrier with no room drops it whole, as a full socket drops datagrams. */
+    private flush(): void {
+        this.flushing = false;
+        if (this.outCount === 0) return;
+        this.out[0] = UDP;
+        this.out[1] = 0;
+        if (this.link.sendUdp(this.out.subarray(0, this.outLen))) {
+            this.stats.sentPackets += this.outCount;
+            this.stats.sentBatches++;
+            this.stats.sentBytes += this.outLen;
+        } else this.stats.dropped += this.outCount;
+        this.outLen = 2;
+        this.outCount = 0;
     }
 
     close(id: number): void {
@@ -164,12 +194,18 @@ export class TunnelNet {
     }
 
     private received(frame: Uint8Array): void {
-        if (frame.length < HEADER) return;
         const v = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
-        const id = this.ids.get(v.getUint16(2, true));
-        if (id === undefined) return;
-        this.stats.receivedPackets++;
+        this.stats.receivedBatches++;
         this.stats.receivedBytes += frame.length;
-        this.sink?.deliver(id, v.getUint32(4, true), v.getUint16(8, true), frame.subarray(HEADER));
+        for (let at = 2; at + RECORD <= frame.length;) {
+            const len = v.getUint16(at + 12, true);
+            const id = this.ids.get(v.getUint16(at, true));
+            if (at + RECORD + len > frame.length) return;
+            if (id !== undefined) {
+                this.stats.receivedPackets++;
+                this.sink?.deliver(id, v.getUint32(at + 2, true), v.getUint16(at + 6, true), frame.subarray(at + RECORD, at + RECORD + len));
+            }
+            at += RECORD + len;
+        }
     }
 }

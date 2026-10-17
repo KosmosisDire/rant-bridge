@@ -110,7 +110,7 @@ private:
     void op_log_subscribe(const nlohmann::json& req, const nlohmann::json& seq);
     void op_udp(const std::string& op, const nlohmann::json& req, const nlohmann::json& seq);
     void on_udp(const uint8_t* p, size_t n);
-    void to_client_udp(uint16_t sock, const uint8_t ip[4], uint16_t port, const uint8_t* data, size_t n);
+    void to_client_udp(const std::string& batch);
     nlohmann::json schemas(Entity& e, bool reflect);
 
     void on_call(Entity& e, const Frame& f, rant::Bytes payload);

@@ -161,7 +161,13 @@ void Rtc::remove_channel(uint16_t id) {
     dc->close();
 }
 
-bool Rtc::send(uint16_t id, const std::string& frame) {
+bool Rtc::has(uint16_t id) {
+    std::lock_guard<std::mutex> g(mu_);
+    auto it = channels_.find(id);
+    return it != channels_.end() && it->second->isOpen();
+}
+
+bool Rtc::send(uint16_t id, const std::string& frame, size_t limit) {
     std::shared_ptr<rtc::DataChannel> dc;
     {
         std::lock_guard<std::mutex> g(mu_);
@@ -169,7 +175,7 @@ bool Rtc::send(uint16_t id, const std::string& frame) {
         if (it == channels_.end()) return false;
         dc = it->second;
     }
-    if (!up_ || !dc->isOpen() || frame.size() > dc->maxMessageSize() || dc->bufferedAmount() > kLowWater) return false;
+    if (!up_ || !dc->isOpen() || frame.size() > dc->maxMessageSize() || dc->bufferedAmount() > limit) return false;
     try { return dc->send(reinterpret_cast<const std::byte*>(frame.data()), frame.size()); }
     catch (const std::exception&) { return false; }
 }

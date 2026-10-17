@@ -134,6 +134,26 @@ async function startChrome() {
     throw new Error("chrome did not open its debugging port");
 }
 
+/* The functions a page spent its samples in, by self time, with what called the top ones. */
+function printProfile(p) {
+    const byId = new Map(p.nodes.map((n) => [n.id, n]));
+    const parent = new Map();
+    for (const n of p.nodes) for (const c of n.children ?? []) parent.set(c, n.id);
+    const self = new Map();
+    const counts = new Map();
+    for (const id of p.samples) counts.set(id, (counts.get(id) ?? 0) + 1);
+    let total = 0;
+    for (const [id, k] of counts) {
+        const f = byId.get(id).callFrame;
+        const name = `${f.functionName || "(anonymous)"} ${f.url ? f.url.split("/").pop() + ":" + f.lineNumber : ""}`.trim();
+        self.set(name, (self.get(name) ?? 0) + k);
+        total += k;
+    }
+    console.log(`profile: ${total} samples`);
+    for (const [name, k] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 30))
+        console.log(`${String(k).padStart(7)} ${(100 * k / total).toFixed(1).padStart(5)}%  ${name}`);
+}
+
 /* ---- one run ---- */
 
 async function page(mode, transport, args, rate) {
@@ -146,14 +166,17 @@ async function page(mode, transport, args, rate) {
     await c.send("Page.navigate", { url });
     let m0 = null, b = null;
     const t0 = Date.now();
+    const profile = !!process.env.PROFILE;
+    if (profile) { await c.send("Profiler.enable"); await c.send("Profiler.setSamplingInterval", { interval: 100 }); }
     while (Date.now() - t0 < 120000) {
         await sleep(50);      /* the start marker is read promptly, so a short run's CPU is right */
         b = await c.eval("JSON.stringify(window.bench ?? null)").then((s) => (s ? JSON.parse(s) : null));
         if (!b) continue;
-        if (b.started && !m0) m0 = await c.metrics();
+        if (b.started && !m0) { m0 = await c.metrics(); if (profile) await c.send("Profiler.start"); }
         if (b.result || b.error) break;
     }
     const m1 = await c.metrics();
+    if (profile && m0) printProfile((await c.send("Profiler.stop")).result.profile);
     await c.close();
     if (!b?.result) return { error: b?.error ?? "no result in 120 s" };
     return { ...b.result, isolated: b.isolated, cpu_ms: m0 ? Math.round((m1.TaskDuration - m0.TaskDuration) * 1000) : null,
@@ -216,7 +239,7 @@ for (const [wname, wargs] of workloads) {
     for (const [cname, run] of clients) {
         if (pick.length && !pick.includes(cname)) continue;
         const b0 = cpuMs(bridge.pid), e0 = cpuMs(echo.pid);
-        const r = await run([...wargs, "--domain", DOMAIN]);
+        const r = await run([...wargs, "--domain", DOMAIN, ...(process.env.EXTRA ? process.env.EXTRA.split(" ") : [])]);
         const row = { workload: wname, client: cname, throttle, ...r, bridge_cpu_ms: Math.round(cpuMs(bridge.pid) - b0),
                       echo_cpu_ms: Math.round(cpuMs(echo.pid) - e0) };
         rows.push(row);

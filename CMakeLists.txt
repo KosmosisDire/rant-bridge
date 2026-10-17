@@ -39,7 +39,7 @@ endif()
 # local presets set CPM_rant_SOURCE to ../rant.
 CPMAddPackage(NAME rant
   GITHUB_REPOSITORY KosmosisDire/Rant
-  VERSION 0.0.28
+  VERSION 0.0.29
   EXCLUDE_FROM_ALL YES
   SYSTEM YES)
 

@@ -2,6 +2,8 @@
 
 add_library(rant_bridge_core STATIC
   config.cpp
+  mdns.cpp
+  net.cpp
   rtc.cpp
   server.cpp
   session.cpp
@@ -11,7 +13,7 @@ target_link_libraries(rant_bridge_core PUBLIC ixwebsocket::ixwebsocket nlohmann_
                       LibDataChannel::LibDataChannelStatic)
 target_compile_definitions(rant_bridge_core PUBLIC RANT_BRIDGE_VERSION="${PROJECT_VERSION}")
 if(WIN32)
-  target_link_libraries(rant_bridge_core PUBLIC iphlpapi)     # the tunnel lists this host's interfaces
+  target_link_libraries(rant_bridge_core PUBLIC iphlpapi)     # net.cpp lists this host's interfaces
 endif()
 if(MSVC)
   target_compile_options(rant_bridge_core PRIVATE /W4 /permissive-)

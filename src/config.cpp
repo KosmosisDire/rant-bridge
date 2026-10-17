@@ -56,6 +56,7 @@ bool write_default_config(const fs::path& path) {
            "#   username: user\n"
            "#   credential: secret\n"
            "webrtc: true\n"
+           "advertise: true               # answer rant-bridges.local and list the bridges on this network\n"
            "rtc_ports: \"\"                 # \"50000-50100\" pins WebRTC to a range, empty = any\n"
            "mtu: 1200\n"
            "grace_ms: 10000               # how long a dropped client may resume its session\n"
@@ -178,6 +179,7 @@ Config load_config(const fs::path& path) {
             }
         }
         else if (key == "webrtc") c.webrtc = scalar<bool>(path, key, v);
+        else if (key == "advertise") c.advertise = scalar<bool>(path, key, v);
         else if (key == "rtc_ports") {
             std::string r = v.IsNull() ? "" : scalar<std::string>(path, key, v);
             if (!r.empty()) {

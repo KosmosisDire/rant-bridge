@@ -20,6 +20,7 @@ struct Config {
     std::vector<std::string> allowed_origins;       /* empty = any origin */
     std::vector<IceServer>   ice;
     bool                     webrtc = true;
+    bool                     advertise = true;      /* answer rant-bridges.local and list the bridges, over mDNS */
     uint16_t                 rtc_port_lo = 0, rtc_port_hi = 0;
     uint32_t                 mtu = 1200;
     uint32_t                 grace_ms = 10000;

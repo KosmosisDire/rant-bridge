@@ -67,7 +67,7 @@ json Session::open(const json& req) {
 
 json Session::reopen_reply() const {
     json ifs = json::array();
-    for (const Tunnel::Iface& f : Tunnel::interfaces()) ifs.push_back({ {"addr", dotted(f.addr)}, {"mask", dotted(f.mask)} });
+    for (const Iface& f : local_interfaces()) ifs.push_back({ {"addr", dotted(f.addr)}, {"mask", dotted(f.mask)} });
     /* a POSIX host hands group traffic only to a socket bound to any address */
 #ifdef _WIN32
     const bool group_binds_any = false;

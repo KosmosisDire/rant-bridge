@@ -4,64 +4,19 @@
 #include <stdexcept>
 
 #ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <iphlpapi.h>
-using sock_t = SOCKET;
-static const sock_t kBad = INVALID_SOCKET;
-static int close_sock(sock_t s) { return closesocket(s); }
-static int last_error() { return WSAGetLastError(); }
-#define poll WSAPoll
+#include <mswsock.h>
 #else
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <ifaddrs.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <poll.h>
-#include <sys/socket.h>
 #include <unistd.h>
-#include <cerrno>
-using sock_t = int;
-static const sock_t kBad = -1;
-static int close_sock(sock_t s) { return ::close(s); }
-static int last_error() { return errno; }
 #endif
 
 namespace bridge {
 
 struct Tunnel::Sock {
-    sock_t   fd = kBad;
+    sock_t   fd = kBadSock;
     uint32_t via = 0;      /* the multicast interface last set, so a send sets it only on a change */
 };
 
-static void nonblock(sock_t s) {
-#ifdef _WIN32
-    u_long on = 1;
-    ioctlsocket(s, FIONBIO, &on);
-#else
-    fcntl(s, F_SETFL, fcntl(s, F_GETFL, 0) | O_NONBLOCK);
-#endif
-}
-
-static std::string why(const char* what) {
-    return std::string(what) + " failed (" + std::to_string(last_error()) + ")";
-}
-
-Tunnel::Tunnel(Deliver deliver) : deliver_(std::move(deliver)), ifaces_(interfaces()) {
-    /* a self connected loopback socket cuts the receive wait short when the socket set changes */
-    sock_t w = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    socklen_t len = sizeof a;
-    if (w != kBad && ::bind(w, (sockaddr*)&a, sizeof a) == 0 && getsockname(w, (sockaddr*)&a, &len) == 0 &&
-        ::connect(w, (sockaddr*)&a, sizeof a) == 0) {
-        nonblock(w);
-        waker_ = (intptr_t)w;
-    } else if (w != kBad) close_sock(w);
+Tunnel::Tunnel(Deliver deliver) : deliver_(std::move(deliver)), ifaces_(local_interfaces()) {
     thread_ = std::thread([this] { run(); });
 }
 
@@ -70,12 +25,9 @@ Tunnel::~Tunnel() {
     wake();
     if (thread_.joinable()) thread_.join();
     for (auto& kv : socks_) close_sock(kv.second->fd);
-    if (waker_ != -1) close_sock((sock_t)waker_);
 }
 
-void Tunnel::wake() {
-    if (waker_ != -1) ::send((sock_t)waker_, "w", 1, 0);
-}
+void Tunnel::wake() { waker_.wake(); }
 
 uint16_t Tunnel::bind(uint16_t sock, uint32_t if_naddr, uint16_t port, bool reuse) {
     {
@@ -83,7 +35,7 @@ uint16_t Tunnel::bind(uint16_t sock, uint32_t if_naddr, uint16_t port, bool reus
         if (!socks_.count(sock) && socks_.size() >= kMaxSockets) throw std::runtime_error("too many tunnel sockets");
     }
     sock_t fd = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (fd == kBad) throw std::runtime_error(why("socket"));
+    if (fd == kBadSock) throw std::runtime_error(failed("socket"));
     int on = 1;
     if (reuse) {
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&on, sizeof on);
@@ -99,7 +51,7 @@ uint16_t Tunnel::bind(uint16_t sock, uint32_t if_naddr, uint16_t port, bool reus
     a.sin_addr.s_addr = if_naddr;
     a.sin_port = htons(port);
     if (::bind(fd, (sockaddr*)&a, sizeof a) != 0) {
-        std::string w = why("bind");
+        std::string w = failed("bind");
         close_sock(fd);
         throw std::runtime_error(w);
     }
@@ -134,7 +86,7 @@ void Tunnel::membership(uint16_t sock, uint32_t group, uint32_t if_naddr, bool j
     m.imr_multiaddr.s_addr = group;
     m.imr_interface.s_addr = if_naddr;
     if (setsockopt(s->fd, IPPROTO_IP, join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP, (const char*)&m, sizeof m) != 0 && join)
-        throw std::runtime_error(why("joining the group"));
+        throw std::runtime_error(failed("joining the group"));
 }
 
 void Tunnel::ttl(uint16_t sock, int ttl) {
@@ -220,18 +172,15 @@ void Tunnel::run() {
     while (!stop_) {
         fds.clear();
         order.clear();
-        if (waker_ != -1) fds.push_back({ (sock_t)waker_, POLLIN, 0 });
+        if (waker_.ok()) fds.push_back({ waker_.fd(), POLLIN, 0 });
         {
             std::lock_guard<std::mutex> g(mu_);
             for (auto& kv : socks_) { fds.push_back({ kv.second->fd, POLLIN, 0 }); order.emplace_back(kv.first, kv.second); }
         }
-        int r = poll(fds.data(), (unsigned long)fds.size(), 1000);
+        int r = poll_socks(fds.data(), fds.size(), 1000);
         if (r <= 0) continue;
-        size_t first = waker_ != -1 ? 1 : 0;
-        if (first && (fds[0].revents & POLLIN)) {
-            char c[16];
-            while (::recv((sock_t)waker_, c, sizeof c, 0) > 0) {}
-        }
+        size_t first = waker_.ok() ? 1 : 0;
+        if (first && (fds[0].revents & POLLIN)) waker_.drain();
         for (size_t i = first; i < fds.size(); i++) {
             if (!(fds[i].revents & POLLIN)) continue;
             auto& [id, s] = order[i - first];
@@ -253,40 +202,6 @@ void Tunnel::run() {
         }
         flush();
     }
-}
-
-std::vector<Tunnel::Iface> Tunnel::interfaces() {
-    std::vector<Iface> out;
-#ifdef _WIN32
-    ULONG size = 16 * 1024;
-    std::vector<uint8_t> mem(size);
-    auto* list = (IP_ADAPTER_ADDRESSES*)mem.data();
-    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, nullptr, list, &size) == ERROR_BUFFER_OVERFLOW) {
-        mem.resize(size);
-        list = (IP_ADAPTER_ADDRESSES*)mem.data();
-        if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, nullptr, list, &size) != NO_ERROR) return out;
-    }
-    for (auto* a = list; a; a = a->Next) {
-        if (a->OperStatus != IfOperStatusUp || a->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
-        for (auto* u = a->FirstUnicastAddress; u; u = u->Next) {
-            auto* sin = (sockaddr_in*)u->Address.lpSockaddr;
-            if (sin->sin_family != AF_INET) continue;
-            ULONG mask = 0;
-            ConvertLengthToIpv4Mask(u->OnLinkPrefixLength, &mask);
-            out.push_back({ sin->sin_addr.s_addr, (uint32_t)mask });
-        }
-    }
-#else
-    ifaddrs* list = nullptr;
-    if (getifaddrs(&list) != 0) return out;
-    for (auto* a = list; a; a = a->ifa_next) {
-        if (!a->ifa_addr || a->ifa_addr->sa_family != AF_INET || !(a->ifa_flags & IFF_UP) || (a->ifa_flags & IFF_LOOPBACK)) continue;
-        uint32_t mask = a->ifa_netmask ? ((sockaddr_in*)a->ifa_netmask)->sin_addr.s_addr : 0;
-        out.push_back({ ((sockaddr_in*)a->ifa_addr)->sin_addr.s_addr, mask });
-    }
-    freeifaddrs(list);
-#endif
-    return out;
 }
 
 }

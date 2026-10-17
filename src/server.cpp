@@ -1,5 +1,6 @@
 #include "server.hpp"
 
+#include "mdns.hpp"
 #include "session.hpp"
 
 #include <ixwebsocket/IXNetSystem.h>
@@ -45,7 +46,7 @@ bool same(const std::string& a, const std::string& b) {
 
 class Server {
 public:
-    explicit Server(const Config& cfg) : cfg_(cfg) {}
+    Server(const Config& cfg, Finder* finder) : cfg_(cfg), finder_(finder) {}
 
     void on_message(const std::shared_ptr<ix::ConnectionState>& state, ix::WebSocket& ws, const ix::WebSocketMessagePtr& msg) {
         const std::string id = state->getId();
@@ -74,6 +75,8 @@ public:
                 ws.send(json({ {"op", "reply"}, {"seq", 0}, {"ok", false}, {"error", "malformed JSON"} }).dump());
                 return;
             }
+            /* the bridges here are no secret, mDNS tells anyone on the network, so no passphrase */
+            if (req.value("op", "") == "bridges") { ws.send(bridges(req).dump()); return; }
             if (c->session) {
                 if (req.value("op", "") == "open") ws.send(json({ {"op", "reply"}, {"seq", req.value("seq", json(0))}, {"ok", false}, {"error", "already open"} }).dump());
                 else c->session->on_text(req);
@@ -119,6 +122,16 @@ public:
     }
 
 private:
+    json bridges(const json& req) const {
+        json list = json::array();
+        if (finder_)
+            for (const FoundBridge& b : finder_->bridges())
+                list.push_back({ {"name", b.name}, {"url", "ws://" + b.address + ":" + std::to_string(b.port)},
+                                 {"version", b.version}, {"self", b.self} });
+        else list.push_back({ {"name", "this bridge"}, {"url", ""}, {"version", RANT_BRIDGE_VERSION}, {"self", true} });
+        return { {"op", "reply"}, {"seq", req.value("seq", json(0))}, {"ok", true}, {"bridges", list} };
+    }
+
     void open(Conn& c, const json& req) {
         json seq = req.value("seq", json(0));
         auto refuse = [&](const std::string& why, bool hangup) {
@@ -168,6 +181,7 @@ private:
     }
 
     const Config& cfg_;
+    Finder* finder_;
     std::mutex mu_;
     std::map<std::string, std::shared_ptr<Conn>> conns_;
     std::map<std::string, std::shared_ptr<Session>> sessions_;   /* by resume token */
@@ -179,7 +193,9 @@ int serve(const Config& cfg, const std::function<bool()>& stop, const std::funct
     ix::initNetSystem();
     rtc::InitLogger(rtc::LogLevel::Warning, [](rtc::LogLevel, std::string m) { std::fprintf(stderr, "[webrtc] %s\n", m.c_str()); });
     rtc::Preload();
-    Server srv(cfg);
+    std::unique_ptr<Finder> finder;
+    if (cfg.advertise) finder = std::make_unique<Finder>(advertised_interfaces(cfg.bind), cfg.port, RANT_BRIDGE_VERSION);
+    Server srv(cfg, finder.get());
     ix::WebSocketServer ws(cfg.port, cfg.bind, ix::SocketServer::kDefaultTcpBacklog, (size_t)cfg.max_connections);
     /* IXWebSocket compresses every message both ways when the client offers it, as browsers do:
        CPU spent on frames that are mostly binary values, video and datagrams */
@@ -204,6 +220,7 @@ int serve(const Config& cfg, const std::function<bool()>& stop, const std::funct
     }
     ws.stop();
     srv.close_all();
+    finder.reset();     /* its goodbye goes out while the sockets still work */
     rtc::Cleanup();
     ix::uninitNetSystem();
     return 0;

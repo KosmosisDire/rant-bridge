@@ -67,7 +67,9 @@ function serve() {
             if (!path.startsWith(prefix)) continue;
             const file = join(dir, path.slice(prefix.length));
             if (!existsSync(file)) break;
-            res.writeHead(200, { "content-type": types[extname(file)] ?? "application/octet-stream", "cache-control": "no-store" });
+            /* cross origin isolation gives performance.now 5 us steps instead of 100 */
+            res.writeHead(200, { "content-type": types[extname(file)] ?? "application/octet-stream", "cache-control": "no-store",
+                                 "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp" });
             res.end(readFileSync(file));
             return;
         }
@@ -82,7 +84,8 @@ function startBridge() {
     const config = join(dir, "bridge.yaml");
     /* sessions outlive the run: reaping a WebRTC session after its grace crashes the bridge
        (a bug of the released bridges too), which would end the matrix */
-    writeFileSync(config, `port: ${BRIDGE}\nbind: 127.0.0.1\npassphrase: bench\nwebrtc: true\ngrace_ms: ${process.env.GRACE_MS ?? 3600000}\n`);
+    writeFileSync(config, `port: ${BRIDGE}\nbind: 127.0.0.1\npassphrase: bench\nwebrtc: true\ngrace_ms: ${process.env.GRACE_MS ?? 3600000}\n` +
+                          (process.env.BRIDGE_MTU ? `mtu: ${process.env.BRIDGE_MTU}\n` : ""));
     const p = start(bridgeExe, ["--config", config], "bridge");
     p.on("exit", (code) => console.error(`the bridge exited with ${code}`));
     return p;
@@ -144,7 +147,7 @@ async function page(mode, transport, args, rate) {
     let m0 = null, b = null;
     const t0 = Date.now();
     while (Date.now() - t0 < 120000) {
-        await sleep(250);
+        await sleep(50);      /* the start marker is read promptly, so a short run's CPU is right */
         b = await c.eval("JSON.stringify(window.bench ?? null)").then((s) => (s ? JSON.parse(s) : null));
         if (!b) continue;
         if (b.started && !m0) m0 = await c.metrics();
@@ -153,7 +156,7 @@ async function page(mode, transport, args, rate) {
     const m1 = await c.metrics();
     await c.close();
     if (!b?.result) return { error: b?.error ?? "no result in 120 s" };
-    return { ...b.result, cpu_ms: m0 ? Math.round((m1.TaskDuration - m0.TaskDuration) * 1000) : null,
+    return { ...b.result, isolated: b.isolated, cpu_ms: m0 ? Math.round((m1.TaskDuration - m0.TaskDuration) * 1000) : null,
              script_ms: m0 ? Math.round((m1.ScriptDuration - m0.ScriptDuration) * 1000) : null,
              heap_mb: +(m1.JSHeapUsedSize / 1048576).toFixed(1) };
 }
@@ -183,8 +186,8 @@ const clients = [
 const workloads = [
     ["rtt-64B", ["ping", "--reliable", "--size", "64", "--count", "1000", "--rate", "100"]],
     ["rtt-16KB", ["ping", "--reliable", "--size", "16384", "--count", "500", "--rate", "50"]],
-    ["tput-1KB", ["ping", "--reliable", "--size", "1024", "--count", "5000", "--window", "32"]],
-    ["tput-64KB", ["ping", "--reliable", "--size", "65536", "--count", "500", "--window", "8"]],
+    ["tput-1KB", ["ping", "--reliable", "--size", "1024", "--count", "40000", "--window", "32"]],
+    ["tput-64KB", ["ping", "--reliable", "--size", "65536", "--count", "2000", "--window", "8"]],
     ["idle", ["idle", "--seconds", "20"]],
 ];
 

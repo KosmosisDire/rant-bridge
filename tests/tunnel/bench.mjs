@@ -12,7 +12,7 @@ const bridge = q.get("bridge") ?? "ws://127.0.0.1:7490";
 const passphrase = q.get("pass") ?? "";
 const transport = q.get("transport") === "websocket" ? "websocket" : "auto";
 const args = (q.get("args") ?? "ping").split(",");
-const bench = (window.bench = { started: 0, result: null, error: null, carrier: null });
+const bench = (window.bench = { started: 0, result: null, error: null, carrier: null, isolated: crossOriginIsolated });
 const log = (t) => { document.getElementById("log").textContent += t + "\n"; };
 
 function option(name, fallback) {

@@ -16,8 +16,6 @@ endforeach()
 
 find_program(NODE node)
 if(NODE)
-  add_test(NAME find COMMAND "${NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/find/test.mjs" "$<TARGET_FILE:rant-bridge>")
-
   # Rant's web package: the local checkout's when building against one, else the pinned
   # release's, fetched once.
   if(CPM_rant_SOURCE AND EXISTS "${CPM_rant_SOURCE}/bindings/web/dist/rant_wasm.mjs")
@@ -35,6 +33,8 @@ if(NODE)
       endif()
     endif()
   endif()
+  add_test(NAME find COMMAND "${NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/find/test.mjs" "$<TARGET_FILE:rant-bridge>"
+           "$<$<BOOL:${RANT_WEB_PACKAGE}>:${RANT_WEB_PACKAGE}>")
   if(EXISTS "${RANT_WEB_PACKAGE}/dist/rant_wasm.mjs")
     add_test(NAME tunnel COMMAND "${NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tunnel/test.mjs" "$<TARGET_FILE:rant-bridge>"
              "${RANT_WEB_PACKAGE}")

@@ -1,13 +1,15 @@
 // Finding bridges over mDNS against two freshly built bridges, both advertising on loopback
-// only: each lists the other, and both answer the shared name.   node tests/find/test.mjs <rant-bridge exe>
+// only: each lists the other, and both answer the shared name. With Rant's web package, its
+// findBridges reads the list too.   node tests/find/test.mjs <rant-bridge exe> [<web package dir>]
 
 import { spawn } from "node:child_process";
 import dgram from "node:dgram";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-const [exe] = process.argv.slice(2);
+const [exe, pkg] = process.argv.slice(2);
 const base = 18480 + (process.pid % 200);
 const ports = [base, base + 1];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -58,6 +60,11 @@ try {
     check(other.some((b) => !b.self && b.url === `ws://127.0.0.1:${ports[0]}`), "and the other lists it back");
     const answers = await resolve("rant-bridges.local");
     check(answers.length > 0 && answers.every((a) => a === "127.0.0.1"), `the shared name resolves to a bridge (${answers.join(", ")})`);
+    if (pkg) {
+        const { findBridges } = await import(pathToFileURL(join(pkg, "dist/tunnel.js")).href);
+        const seen = await findBridges(`ws://127.0.0.1:${ports[1]}`);
+        check(seen.length === found.length, "Rant's findBridges reads the same list");
+    }
 } catch (e) {
     console.log(`FAIL ${e?.message ?? e}`);
     failed++;

@@ -51,8 +51,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # TLS and zlib off: the bridge sits behind a tunnel or on localhost, and raw speed matters.
-# The patch lets a connection read while it sends, and drops wsock32, which would take Rant's
-# socket calls on Windows and break its multicast.
+# The patch lets a connection read while it sends, drops wsock32, which would take Rant's
+# socket calls on Windows and break its multicast, and keeps a second bridge off the port of a
+# running one on Windows.
 CPMAddPackage(NAME ixwebsocket
   URL https://github.com/machinezone/IXWebSocket/archive/refs/tags/v12.0.1.tar.gz
   VERSION 12.0.1

@@ -43,6 +43,24 @@ index cb6dca9..4963e1d 100644
  
          // Virtual methods
          virtual bool accept(std::string& errMsg);
+diff --git a/ixwebsocket/IXSocketServer.cpp b/ixwebsocket/IXSocketServer.cpp
+index bf9d20a..69cee95 100644
+--- a/ixwebsocket/IXSocketServer.cpp
++++ b/ixwebsocket/IXSocketServer.cpp
+@@ -88,7 +88,13 @@ namespace ix
+ 
+         // Make that socket reusable. (allow restarting this server at will)
+         int enable = 1;
++#ifdef _WIN32
++        // Windows lets SO_REUSEADDR take a port another server listens on, so a second
++        // bridge would answer beside the first. Exclusive use refuses it instead.
++        if (setsockopt(_serverFd, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char*) &enable, sizeof(enable)) < 0)
++#else
+         if (setsockopt(_serverFd, SOL_SOCKET, SO_REUSEADDR, (char*) &enable, sizeof(enable)) < 0)
++#endif
+         {
+             std::stringstream ss;
+             ss << "SocketServer::listen() error calling setsockopt(SO_REUSEADDR) "
 diff --git a/ixwebsocket/IXWebSocketTransport.cpp b/ixwebsocket/IXWebSocketTransport.cpp
 index fb3c40a..adfbf63 100644
 --- a/ixwebsocket/IXWebSocketTransport.cpp

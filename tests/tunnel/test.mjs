@@ -103,6 +103,16 @@ try {
     peer.send("again", aPort, "127.0.0.1");
     await until(() => got.length > 0, 3000);
     check(got.some((x) => x.id === a && x.text === "again"), "the lent port reaches the client again");
+
+    /* the passphrase itself opens nothing: an open must prove a fresh nonce */
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
+    const answer = await new Promise((resolve, reject) => {
+        ws.onerror = () => reject(new Error("cannot reach the bridge"));
+        ws.onopen = () => ws.send(JSON.stringify({ op: "open", seq: 1, proto: 14, passphrase: "tunnel-test" }));
+        ws.onmessage = (m) => resolve(JSON.parse(String(m.data)));
+    });
+    ws.close();
+    check(answer.ok === false && /challenge/.test(answer.error), `an open with no proof is refused (${answer.error})`);
 } catch (e) {
     console.log(`FAIL ${e?.message ?? e}`);
     failed++;

@@ -1,5 +1,6 @@
 #include "server.hpp"
 
+#include "auth.hpp"
 #include "mdns.hpp"
 #include "session.hpp"
 
@@ -27,6 +28,7 @@ namespace {
 struct Conn {
     ix::WebSocket* ws = nullptr;
     std::shared_ptr<Session> session;
+    std::string nonce;      /* the challenge the next open answers, used once */
 };
 
 std::string new_token() {
@@ -35,13 +37,6 @@ std::string new_token() {
     for (int i = 0; i < 32; i++) b[i] = "0123456789abcdef"[rd() % 16];
     b[32] = 0;
     return b;
-}
-
-/* constant time, so the passphrase cannot be found one character at a time */
-bool same(const std::string& a, const std::string& b) {
-    unsigned diff = (unsigned)(a.size() ^ b.size());
-    for (size_t i = 0; i < a.size() && i < b.size(); i++) diff |= (unsigned)(a[i] ^ b[i]);
-    return diff == 0;
 }
 
 class Server {
@@ -77,6 +72,11 @@ public:
             }
             /* the bridges here are no secret, mDNS tells anyone on the network, so no passphrase */
             if (req.value("op", "") == "bridges") { ws.send(bridges(req).dump()); return; }
+            if (req.value("op", "") == "challenge") {
+                c->nonce = new_nonce();
+                ws.send(json({ {"op", "reply"}, {"seq", req.value("seq", json(0))}, {"ok", true}, {"nonce", c->nonce} }).dump());
+                return;
+            }
             if (c->session) {
                 if (req.value("op", "") == "open") ws.send(json({ {"op", "reply"}, {"seq", req.value("seq", json(0))}, {"ok", false}, {"error", "already open"} }).dump());
                 else c->session->on_text(req);
@@ -143,10 +143,13 @@ private:
             refuse("this bridge speaks protocol " + std::to_string(kProtocol) + ", the client " + std::to_string(req.value("proto", 0)), true);
             return;
         }
-        if (!cfg_.passphrase.empty() && !same(req.value("passphrase", std::string()), cfg_.passphrase)) {
+        std::string nonce = std::move(c.nonce);
+        c.nonce.clear();
+        if (!cfg_.passphrase.empty()
+            && (nonce.empty() || !same_secret(req.value("proof", std::string()), passphrase_proof(cfg_.passphrase, nonce)))) {
             /* a slow refusal, not a lockout: behind a tunnel every client shares one address */
             std::this_thread::sleep_for(std::chrono::seconds(1));
-            refuse("wrong passphrase", true);
+            refuse(nonce.empty() ? "ask for a challenge before open" : "wrong passphrase", true);
             return;
         }
 

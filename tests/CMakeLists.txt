@@ -9,7 +9,7 @@ foreach(_cfg ${CMAKE_CONFIGURATION_TYPES})
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${_CFG} "${CMAKE_CURRENT_BINARY_DIR}/bin")
 endforeach()
 
-foreach(name config mdns)
+foreach(name auth config mdns)
   add_executable(unit_${name} unit/${name}.cpp)
   target_link_libraries(unit_${name} PRIVATE rant_bridge_core)
   add_test(NAME unit.${name} COMMAND unit_${name})

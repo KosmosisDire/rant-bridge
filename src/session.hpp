@@ -23,7 +23,7 @@ namespace ix { class WebSocket; }
 
 namespace bridge {
 
-constexpr int kProtocol = 13;
+constexpr int kProtocol = 14;
 
 /* PING [u8 7][u32 seq][u32 us][u32 jitter_us][u32 samples][u32 missed] tells the client what
  * the bridge measures of its link, and PONG [u8 8][u32 seq] answers it. */

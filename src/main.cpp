@@ -48,7 +48,7 @@ static void usage() {
     std::printf("usage: rant-bridge [--config PATH] [--log-file PATH] [--supervise]\n"
                 "       rant-bridge --init-config [--config PATH] [--bind IP] [--port N] [--pass TEXT]\n"
                 "       rant-bridge --version\n"
-                "Lends this host's UDP sockets to Rant nodes in pages. The config defaults to %s.\n"
+                "Lends this host's UDP sockets to Rant nodes elsewhere. The config defaults to %s.\n"
                 "--init-config writes it when missing. --bind and --port set where it listens and\n"
                 "--pass sets the passphrase, empty for none. A running bridge takes them at its next start.\n",
                 default_config_path().string().c_str());

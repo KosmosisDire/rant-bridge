@@ -27,6 +27,10 @@ const pick = arg("--clients", "")?.split(",").filter(Boolean) ?? [];
 const out = arg("--out", join(tmpdir(), "tunnel-bench.jsonl"));
 const DOMAIN = "160";
 const HTTP = 8095, BRIDGE = 7490, CDP = 9333;
+/* EXTERNAL: a bridge and a reliable echo already run at BRIDGE_HOST, such as in WSL */
+const HOST = process.env.BRIDGE_HOST ?? "127.0.0.1";
+const EXTERNAL = !!process.env.EXTERNAL;
+const PAGES = new Set(["tunnel-webrtc", "tunnel-ws", "client-webrtc", "client-ws"]);
 const exe = (p) => (process.platform === "win32" ? p + ".exe" : p);
 const benchExe = join(rantWeb, "bin", exe("rant_web_bench"));
 const bridgeExe = process.env.BRIDGE_EXE ?? join(bridgeRoot, "bin", exe("rant-bridge"));
@@ -157,7 +161,7 @@ function printProfile(p) {
 /* ---- one run ---- */
 
 async function page(mode, transport, args, rate) {
-    const url = `http://127.0.0.1:${HTTP}/bench.html?mode=${mode}&transport=${transport}&bridge=ws://127.0.0.1:${BRIDGE}` +
+    const url = `http://127.0.0.1:${HTTP}/bench.html?mode=${mode}&transport=${transport}&bridge=ws://${HOST}:${BRIDGE}` +
                 `&pass=bench&args=${args.join(",")}`;
     const c = await Cdp.open("about:blank");
     await c.send("Performance.enable");
@@ -200,6 +204,7 @@ async function proc(cmd, args) {
 const clients = [
     ["native", (a) => proc(benchExe, a)],
     ["wasm-node", (a) => proc(process.execPath, [join(rantWeb, "bindings", "web", "bench", "node.mjs"), ...a])],
+    ["tunnel-node", (a) => proc(process.execPath, [join(here, "node-tunnel.mjs"), `ws://${HOST}:${BRIDGE}`, ...a])],
     ["tunnel-webrtc", (a) => page("wasm", "auto", a, throttle)],
     ["tunnel-ws", (a) => page("wasm", "websocket", a, throttle)],
     ["client-webrtc", (a) => page("client", "auto", a, throttle)],
@@ -217,9 +222,10 @@ const workloads = [
 /* ---- main ---- */
 
 const server = serve();
-const bridge = startBridge();
-await startChrome();
-{
+const bridge = EXTERNAL ? null : startBridge();
+const wanted = clients.map(([n]) => n).filter((n) => !pick.length || pick.includes(n));
+if (wanted.some((n) => PAGES.has(n))) {
+    await startChrome();
     /* the first peer connection of a browser stalls its page while WebRTC starts, so that
        cost lands here and not in a run */
     const w = await Cdp.open("about:blank");
@@ -231,23 +237,24 @@ const rows = [];
 for (const [wname, wargs] of workloads) {
     if (only.length && !only.some((o) => wname.startsWith(o) || o === wname)) continue;
     const reliable = wargs.includes("--reliable");
-    const echo = start(benchExe, ["echo", "--domain", DOMAIN, ...(reliable ? ["--reliable"] : [])], "echo");
+    const echo = EXTERNAL ? null : start(benchExe, ["echo", "--domain", DOMAIN, ...(reliable ? ["--reliable"] : [])], "echo");
     /* idle nodes run on a mesh of ten others, so discovery has something to do */
     const crowd = wname === "idle" ? Array.from({ length: 10 }, (_, i) =>
         start(benchExe, ["idle", "--domain", DOMAIN, "--seconds", "600"], `crowd${i}`)) : [];
     await sleep(1500);
     for (const [cname, run] of clients) {
         if (pick.length && !pick.includes(cname)) continue;
-        const b0 = cpuMs(bridge.pid), e0 = cpuMs(echo.pid);
+        const cpu = (p) => (p ? cpuMs(p.pid) : 0);
+        const b0 = cpu(bridge), e0 = cpu(echo);
         const r = await run([...wargs, "--domain", DOMAIN, ...(process.env.EXTRA ? process.env.EXTRA.split(" ") : [])]);
-        const row = { workload: wname, client: cname, throttle, ...r, bridge_cpu_ms: Math.round(cpuMs(bridge.pid) - b0),
-                      echo_cpu_ms: Math.round(cpuMs(echo.pid) - e0) };
+        const row = { workload: wname, client: cname, throttle, ...r, bridge_cpu_ms: bridge ? Math.round(cpu(bridge) - b0) : null,
+                      echo_cpu_ms: echo ? Math.round(cpu(echo) - e0) : null };
         rows.push(row);
         appendFileSync(out, JSON.stringify(row) + "\n");
         console.log(JSON.stringify(row));
         await sleep(500);
     }
-    stop(echo);
+    if (echo) stop(echo);
     crowd.forEach(stop);
     await sleep(1000);
 }

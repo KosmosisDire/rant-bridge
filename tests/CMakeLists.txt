@@ -1,6 +1,7 @@
-# unit.<name>  one C++ executable per module, tests/unit/<name>.cpp
-# tunnel       the tunnel against a freshly built bridge through Rant's TunnelNet, tests/tunnel
-# find         two bridges finding each other over mDNS on loopback, tests/find
+# unit.<name>    one C++ executable per module, tests/unit/<name>.cpp
+# tunnel         the tunnel against a freshly built bridge through Rant's TunnelNet, tests/tunnel
+# tunnel.native  the same through Rant's native client, tests/tunnel/native.c
+# find           two bridges finding each other over mDNS on loopback, tests/find
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
 foreach(_cfg ${CMAKE_CONFIGURATION_TYPES})
@@ -15,6 +16,18 @@ foreach(name config mdns)
 endforeach()
 
 find_program(NODE node)
+# Rant's native client, from the Rant that has one
+file(STRINGS "${rant_SOURCE_DIR}/dist/rant.h" _rant_native_tunnel REGEX "RANT_E_BRIDGE" LIMIT_COUNT 1)
+if(NODE AND _rant_native_tunnel)
+  find_package(Threads REQUIRED)
+  add_executable(tunnel_native tunnel/native.c)
+  target_link_libraries(tunnel_native PRIVATE rant::rant Threads::Threads)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(tunnel_native PRIVATE rt)
+  endif()
+  add_test(NAME tunnel.native COMMAND "${NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tunnel/native.mjs"
+           "$<TARGET_FILE:rant-bridge>" "$<TARGET_FILE:tunnel_native>")
+endif()
 if(NODE)
   # Rant's web package: the local checkout's when building against one, else the pinned
   # release's, fetched once.

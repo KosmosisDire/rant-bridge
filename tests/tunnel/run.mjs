@@ -39,8 +39,8 @@ const chrome = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Application
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const procs = [];
 
-function start(cmd, args, name) {
-    const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+function start(cmd, args, name, env = {}) {
+    const p = spawn(cmd, args, { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
     p.name = name;
     p.lines = [];
     let buf = "";
@@ -92,7 +92,8 @@ function startBridge() {
        (a bug of the released bridges too), which would end the matrix */
     writeFileSync(config, `port: ${BRIDGE}\nbind: 127.0.0.1\npassphrase: bench\nwebrtc: true\ngrace_ms: ${process.env.GRACE_MS ?? 3600000}\n` +
                           (process.env.BRIDGE_MTU ? `mtu: ${process.env.BRIDGE_MTU}\n` : ""));
-    const p = start(bridgeExe, ["--config", config], "bridge");
+    /* a home of its own, or the bridge writes its state over that of the user's bridge */
+    const p = start(bridgeExe, ["--config", config], "bridge", { RANT_HOME: dir });
     p.on("exit", (code) => console.error(`the bridge exited with ${code}`));
     return p;
 }

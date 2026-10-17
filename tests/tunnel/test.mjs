@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import dgram from "node:dgram";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const [exe, pkg] = process.argv.slice(2);
@@ -24,7 +24,8 @@ const until = async (f, ms) => { for (const end = Date.now() + ms; !f() && Date.
 let failed = 0;
 const check = (ok, what) => { console.log(`${ok ? "ok  " : "FAIL"} ${what}`); if (!ok) failed++; };
 
-const start = () => spawn(exe, ["--config", cfg], { stdio: ["ignore", "ignore", "inherit"] });
+/* a home of its own, or the bridge writes its state over that of the user's bridge */
+const start = () => spawn(exe, ["--config", cfg], { env: { ...process.env, RANT_HOME: dirname(cfg) }, stdio: ["ignore", "ignore", "inherit"] });
 let bridge = start();
 const peer = dgram.createSocket("udp4");
 let net = null;

@@ -181,6 +181,9 @@ int serve(const Config& cfg, const std::function<bool()>& stop, const std::funct
     rtc::Preload();
     Server srv(cfg);
     ix::WebSocketServer ws(cfg.port, cfg.bind, ix::SocketServer::kDefaultTcpBacklog, (size_t)cfg.max_connections);
+    /* IXWebSocket compresses every message both ways when the client offers it, as browsers do:
+       CPU spent on frames that are mostly binary values, video and datagrams */
+    ws.disablePerMessageDeflate();
     ws.setOnClientMessageCallback([&srv](std::shared_ptr<ix::ConnectionState> st, ix::WebSocket& w, const ix::WebSocketMessagePtr& m) {
         try { srv.on_message(st, w, m); }
         catch (const std::exception& e) { std::fprintf(stderr, "rant-bridge: %s\n", e.what()); }

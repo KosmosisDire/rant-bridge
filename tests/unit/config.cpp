@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 
 using namespace bridge;
@@ -27,6 +28,20 @@ int main() {
     std::ofstream(p) << "ice:\n  - urls: turn:t.example.com:3478\n    username: u\n    credential: s\nrtc_ports: \"50000-50010\"\n";
     c = load_config(p);
     CHECK(c.ice.size() == 1 && c.ice[0].username == "u" && c.rtc_port_lo == 50000 && c.rtc_port_hi == 50010);
+
+    /* set_config: a key's line in place with its comment, a missing key added, a bad value undone */
+    std::ofstream(p) << "port: 7480        # the port\npassphrase: x\n";
+    set_config(p, { { "port", "7999" }, { "bind", "127.0.0.1" } });
+    std::ifstream in(p);
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+    CHECK(text == "port: 7999        # the port\npassphrase: x\nbind: 127.0.0.1\n");
+    bool undone = false;
+    try { set_config(p, { { "port", "not a port" } }); } catch (const std::exception&) { undone = true; }
+    std::ifstream again(p);
+    std::string after((std::istreambuf_iterator<char>(again)), std::istreambuf_iterator<char>());
+    again.close();
+    CHECK(undone && after == text);
     fs::remove_all(dir);
     return finish();
 }

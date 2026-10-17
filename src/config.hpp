@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace bridge {
@@ -38,5 +39,9 @@ Config load_config(const std::filesystem::path& path);
 
 /* Writes the commented default config with a fresh passphrase. false when it already exists. */
 bool write_default_config(const std::filesystem::path& path);
+
+/* Sets top level settings, writing the default config first when there is none. A key's line
+   keeps its comment, a key the file lacks is added, and a result that would not load is undone. */
+void set_config(const std::filesystem::path& path, const std::vector<std::pair<std::string, std::string>>& values);
 
 }

@@ -47,10 +47,27 @@ static bool stop_requested() { return g_stop.load(); }
 
 static void usage() {
     std::printf("usage: rant-bridge [--config PATH] [--log-file PATH] [--supervise]\n"
-                "       rant-bridge --init-config [--config PATH]\n"
+                "       rant-bridge --init-config [--config PATH] [--bind IP] [--port N]\n"
                 "       rant-bridge --version\n"
-                "Serves Rant to WebSocket and WebRTC clients. The config defaults to %s.\n",
+                "Serves Rant to WebSocket and WebRTC clients. The config defaults to %s.\n"
+                "--init-config writes it when missing, and --bind and --port set where it listens,\n"
+                "which a running bridge takes at its next start.\n",
                 default_config_path().string().c_str());
+}
+
+/* A dotted IPv4 address, such as 0.0.0.0 for every interface. */
+static bool dotted_ipv4(const std::string& s) {
+    int parts = 0;
+    for (size_t at = 0; at <= s.size(); parts++) {
+        size_t dot = s.find('.', at);
+        if (dot == std::string::npos) dot = s.size();
+        std::string part = s.substr(at, dot - at);
+        if (part.empty() || part.size() > 3 || part.find_first_not_of("0123456789") != std::string::npos ||
+            std::atoi(part.c_str()) > 255)
+            return false;
+        at = dot + 1;
+    }
+    return parts == 4;
 }
 
 /* Output goes to the log file, else to the terminal that started us, if any. */
@@ -173,7 +190,7 @@ static int supervise(const char* self, const std::vector<std::string>& args) {
 }
 
 int main(int argc, char** argv) {
-    std::string config = default_config_path().string(), log_file;
+    std::string config = default_config_path().string(), log_file, bind, port;
     bool init = false, sup = false;
     std::vector<std::string> child_args;    /* what a supervised child gets: everything but --supervise */
     for (int i = 1; i < argc; i++) {
@@ -183,14 +200,30 @@ int main(int argc, char** argv) {
         else if (a == "--log-file" && has_value) { log_file = argv[++i]; child_args.insert(child_args.end(), { a, log_file }); }
         else if (a == "--supervise") sup = true;
         else if (a == "--init-config") init = true;
+        else if (a == "--bind" && has_value) bind = argv[++i];
+        else if (a == "--port" && has_value) port = argv[++i];
         else if (a == "--version") { std::printf("%s\n", RANT_BRIDGE_VERSION); return 0; }
         else { usage(); return a == "--help" || a == "-h" ? 0 : 2; }
     }
+    if ((!bind.empty() || !port.empty()) && !init) { usage(); return 2; }
     if (init) {
+        std::vector<std::pair<std::string, std::string>> set;
+        if (!bind.empty()) {
+            if (!dotted_ipv4(bind)) { std::fprintf(stderr, "rant-bridge: --bind takes an address such as 0.0.0.0 or 127.0.0.1\n"); return 2; }
+            set.push_back({ "bind", bind });
+        }
+        if (!port.empty()) {
+            long p = port.find_first_not_of("0123456789") == std::string::npos && port.size() <= 5 ? std::atol(port.c_str()) : 0;
+            if (p < 1 || p > 65535) { std::fprintf(stderr, "rant-bridge: --port takes a number from 1 to 65535\n"); return 2; }
+            set.push_back({ "port", std::to_string(p) });
+        }
         try {
-            bool made = write_default_config(config);
+            bool made = !fs::exists(config);
+            if (set.empty()) write_default_config(config);
+            else set_config(config, set);
             std::printf("%s\n", config.c_str());
             if (made) std::fprintf(stderr, "wrote a new config with a fresh passphrase\n");
+            for (const auto& [key, value] : set) std::fprintf(stderr, "set %s to %s\n", key.c_str(), value.c_str());
             return 0;
         } catch (const std::exception& e) { std::fprintf(stderr, "rant-bridge: %s\n", e.what()); return 1; }
     }

@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <random>
 #include <stdexcept>
 #include <system_error>
@@ -45,7 +46,7 @@ bool write_default_config(const fs::path& path) {
     if (!out) throw std::runtime_error("cannot write " + path.string());
     out << "# Rant bridge settings. Apply a change with: rant bridge restart\n"
            "port: 7480\n"
-           "bind: 0.0.0.0                 # every interface, 127.0.0.1 keeps it to this computer\n"
+           "bind: 0.0.0.0                 # 0.0.0.0 every interface, 127.0.0.1 this computer only\n"
            "passphrase: " << new_passphrase() << "\n"
            "allowed_origins: []           # browser origins allowed to connect, empty = any\n"
            "ice:\n"
@@ -68,6 +69,55 @@ bool write_default_config(const fs::path& path) {
     fs::permissions(path, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace);
 #endif
     return true;
+}
+
+void set_config(const fs::path& path, const std::vector<std::pair<std::string, std::string>>& values) {
+    write_default_config(path);
+    std::string before;
+    {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) throw std::runtime_error("cannot read " + path.string());
+        before.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    std::string text = before;
+    for (const auto& [key, value] : values) {
+        const std::string head = key + ":";
+        bool found = false;
+        for (size_t at = 0; at < text.size() && !found;) {
+            size_t end = text.find('\n', at);
+            if (end == std::string::npos) end = text.size();
+            size_t stop = end > at && text[end - 1] == '\r' ? end - 1 : end;
+            if (text.compare(at, head.size(), head) == 0) {
+                /* the new value in the old one's width, so the comment stays in its column */
+                size_t hash = text.find('#', at);
+                std::string comment = hash < stop ? text.substr(hash, stop - hash) : "";
+                std::string set = head + " " + value;
+                if (!comment.empty()) {
+                    size_t width = hash - at;
+                    set += std::string(width > set.size() ? width - set.size() : 1, ' ') + comment;
+                }
+                text.replace(at, stop - at, set);
+                found = true;
+            }
+            at = end + 1;
+        }
+        if (!found) {
+            const std::string nl = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+            text += (text.empty() || text.back() == '\n' ? "" : nl) + head + " " + value + nl;
+        }
+    }
+    auto write = [&](const std::string& s) {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out) throw std::runtime_error("cannot write " + path.string());
+        out << s;
+    };
+    write(text);
+    try {
+        load_config(path);
+    } catch (...) {
+        write(before);
+        throw;
+    }
 }
 
 [[noreturn]] static void fail(const fs::path& path, const YAML::Node& n, const std::string& why) {

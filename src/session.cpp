@@ -49,7 +49,7 @@ Session::~Session() {
     }
     cv_.notify_all();
     if (ticker_.joinable()) ticker_.join();
-    { std::lock_guard<std::mutex> g(ws_mu_); ws_ = nullptr; }
+    { std::lock_guard<std::recursive_mutex> g(ws_mu_); ws_ = nullptr; }
     tunnel_.reset();    /* its thread delivers into this session, so it stops first */
     std::shared_ptr<Rtc> rtc;
     { std::lock_guard<std::mutex> g(mu_); rtc = std::move(rtc_); }
@@ -79,7 +79,7 @@ json Session::reopen_reply() const {
 
 void Session::attach(ix::WebSocket* ws) {
     std::shared_ptr<Rtc> old;     /* a returning client negotiates WebRTC afresh */
-    { std::lock_guard<std::mutex> g(ws_mu_); ws_ = ws; }
+    { std::lock_guard<std::recursive_mutex> g(ws_mu_); ws_ = ws; }
     std::lock_guard<std::mutex> g(mu_);
     attached_ = true;
     detached_at_ = {};
@@ -92,7 +92,7 @@ void Session::attach(ix::WebSocket* ws) {
 void Session::detach(ix::WebSocket* ws) {
     std::shared_ptr<Rtc> rtc;
     {
-        std::lock_guard<std::mutex> g(ws_mu_);
+        std::lock_guard<std::recursive_mutex> g(ws_mu_);
         if (ws_ != ws) return;
         ws_ = nullptr;
     }
@@ -112,7 +112,7 @@ milliseconds Session::detached_for() const {
 
 void Session::send_json(const json& j) {
     std::string text = j.dump(-1, ' ', false, json::error_handler_t::replace);
-    std::lock_guard<std::mutex> g(ws_mu_);
+    std::lock_guard<std::recursive_mutex> g(ws_mu_);
     if (ws_) ws_->send(text, false);
 }
 
@@ -129,7 +129,7 @@ void Session::send_ping(const std::string& ping) {
     std::shared_ptr<Rtc> rtc;
     { std::lock_guard<std::mutex> g(mu_); rtc = rtc_; }
     if (rtc && rtc->up() && rtc->send(kPingChannel, ping)) return;
-    std::lock_guard<std::mutex> g(ws_mu_);
+    std::lock_guard<std::recursive_mutex> g(ws_mu_);
     if (ws_) ws_->sendBinary(ping);
 }
 
@@ -144,7 +144,7 @@ void Session::to_client(const std::string& batch) {
         rtc = rtc_;
     }
     if (rtc && rtc->up() && rtc->has(kTunnelChannel)) { rtc->send(kTunnelChannel, batch, kTunnelBacklog); return; }
-    std::lock_guard<std::mutex> g(ws_mu_);
+    std::lock_guard<std::recursive_mutex> g(ws_mu_);
     if (ws_ && ws_->bufferedAmount() < kTunnelBacklog) ws_->sendBinary(batch);
 }
 
@@ -188,7 +188,7 @@ void Session::tick() {
     }
     if (!ping.empty()) send_ping(ping);
     if (drop) {
-        std::lock_guard<std::mutex> g(ws_mu_);
+        std::lock_guard<std::recursive_mutex> g(ws_mu_);
         if (ws_) {
             std::fprintf(stderr, "rant-bridge: %s stopped answering pings, closing it\n", name_.c_str());
             ws_->close(4008, "no answer to pings");

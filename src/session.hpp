@@ -88,8 +88,9 @@ private:
 
     mutable std::mutex mu_;      /* leaf lock */
     bool attached_ = false;
-    /* the socket has its own lock: a slow write must never hold the session state */
-    std::mutex ws_mu_;
+    /* the socket has its own lock: a slow write must never hold the session state. Recursive,
+       since a send that finds the peer gone runs the close callback, which detaches, inside it */
+    std::recursive_mutex ws_mu_;
     ix::WebSocket* ws_ = nullptr;
     std::chrono::steady_clock::time_point detached_at_{};
     std::shared_ptr<Rtc> rtc_;

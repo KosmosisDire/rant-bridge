@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Chrome to Chrome data channel</title></head>
+<body>
+<script type="module">
+// Two peer connections in one page, so a data channel's ceiling in this browser shows with
+// no bridge on the far side. window.loop holds the result: MB/s and messages per second.
+const q = new URLSearchParams(location.search);
+const size = Number(q.get("size") ?? 60000), seconds = Number(q.get("seconds") ?? 4), reliable = q.has("reliable");
+const a = new RTCPeerConnection(), b = new RTCPeerConnection();
+a.onicecandidate = (e) => e.candidate && b.addIceCandidate(e.candidate);
+b.onicecandidate = (e) => e.candidate && a.addIceCandidate(e.candidate);
+const init = reliable ? { negotiated: true, id: 1 } : { negotiated: true, id: 1, ordered: false, maxRetransmits: 0 };
+const tx = a.createDataChannel("x", init), rx = b.createDataChannel("x", init);
+rx.binaryType = "arraybuffer";
+let bytes = 0, msgs = 0, t0 = 0;
+rx.onmessage = (e) => { bytes += e.data.byteLength; msgs++; };
+await a.setLocalDescription(); await b.setRemoteDescription(a.localDescription);
+await b.setLocalDescription(); await a.setRemoteDescription(b.localDescription);
+await new Promise((r) => { tx.onopen = r; });
+const payload = new Uint8Array(size).fill(0x5a);
+tx.bufferedAmountLowThreshold = 1 << 20;
+t0 = performance.now();
+const pump = () => {
+    while (tx.bufferedAmount < (4 << 20) && performance.now() - t0 < seconds * 1000) tx.send(payload);
+    if (performance.now() - t0 < seconds * 1000) setTimeout(pump, 0);
+};
+tx.onbufferedamountlow = pump;
+pump();
+await new Promise((r) => setTimeout(r, seconds * 1000 + 500));
+const secs = (performance.now() - t0) / 1000;
+window.loop = { size, reliable, mb_per_s: +(bytes / secs / 1e6).toFixed(1), msgs_per_s: Math.round(msgs / secs) };
+document.body.textContent = JSON.stringify(window.loop);
+</script>
+</body>
+</html>

@@ -5,7 +5,8 @@
 //   node tests/tunnel/run.mjs [--rant-web PATH] [--only WORKLOAD,...] [--clients NAME,...]
 //                             [--throttle N] [--out FILE]
 //
-// --rant-web is the Rant checkout with bin/rant_web_bench.exe and bin/web (cmake --preset web).
+// --rant-web is the Rant checkout with bin/rant_web_bench.exe, bin/web (cmake --preset web) and
+// the net objects in bindings/web/dist, TunnelNet among them.
 // A page's CPU is its main thread busy time over the measured phase (DevTools TaskDuration),
 // the others' is process CPU over the same phase. The bridge's CPU is measured around each run.
 
@@ -20,7 +21,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const bridgeRoot = resolve(here, "../..");
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i < 0 ? d : argv[i + 1]; };
-const rantWeb = resolve(arg("--rant-web", resolve(bridgeRoot, "../rant-web")));
+const rantWeb = resolve(arg("--rant-web", resolve(bridgeRoot, "../rant")));
 const only = arg("--only", "")?.split(",").filter(Boolean) ?? [];
 const throttle = Number(arg("--throttle", "1"));
 const pick = arg("--clients", "")?.split(",").filter(Boolean) ?? [];
@@ -64,7 +65,8 @@ function cpuMs(pid) {
 
 const types = { ".html": "text/html", ".mjs": "text/javascript", ".js": "text/javascript", ".wasm": "application/wasm" };
 function serve() {
-    const roots = [["/wasm/", join(rantWeb, "bin", "web")], ["/client/", join(bridgeRoot, "client", "dist")], ["/", here]];
+    const roots = [["/wasm/", join(rantWeb, "bin", "web")], ["/rant/", join(rantWeb, "bindings", "web", "dist")],
+                   ["/client/", join(bridgeRoot, "client", "dist")], ["/", here]];
     const server = createServer((req, res) => {
         const path = decodeURIComponent(req.url.split("?")[0]);
         for (const [prefix, dir] of roots) {

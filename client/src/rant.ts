@@ -15,5 +15,3 @@ export {
     u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, bool, map, string, array, enumOf, struct, dsl, types,
     type Schema, type Infer, type Scalar, type VideoFrameValue, type ImageValue, type ExternalVideoStreamValue,
 } from "./schema.js";
-
-export { TunnelNet, type TunnelOptions, type TunnelStats } from "./tunnel.js";

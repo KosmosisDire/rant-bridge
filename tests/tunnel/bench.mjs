@@ -5,7 +5,8 @@
 //   result   the JSON line, with what crossed the tunnel or the socket
 //   error    why it stopped
 
-import { RantNode, TunnelNet } from "/client/rant.js";
+import { RantNode } from "/client/rant.js";
+import { TunnelNet } from "/rant/tunnel.js";
 
 const q = new URLSearchParams(location.search);
 const bridge = q.get("bridge") ?? "ws://127.0.0.1:7490";

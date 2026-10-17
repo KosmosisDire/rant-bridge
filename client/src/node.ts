@@ -36,8 +36,6 @@ export interface NodeOptions {
     iceServers?: RTCIceServer[];
     rtcTimeoutMs?: number;
     onEvent?: (e: RantEvent) => void;
-    /* a tunnel session, with no node on the bridge: TunnelNet uses it for Rant built to wasm */
-    tunnel?: boolean;
 }
 
 export interface TopicOptions {
@@ -467,8 +465,6 @@ export class RantNode {
     /** @internal */ pc: RTCPeerConnection | null = null;
     /** @internal */ channels = new Map<number, RTCDataChannel>();
     /** @internal */ videoLines = new Map<RTCRtpTransceiver, { id: number; path: string; onVerdict: (v: string) => void }>();
-    /** @internal */ tunnelInfo: { interfaces: { addr: string; mask: string }[] } | null = null;
-    /** @internal */ onUdp: ((frame: Uint8Array) => void) | null = null;
 
     private constructor(readonly url: string, private opts: NodeOptions) {
         this.reflection = new Reflection(this);
@@ -518,7 +514,6 @@ export class RantNode {
             .catch((e: RantError & { answered?: boolean }) => { if (e.answered) this.refused = e; throw e; });
         this.token = r.resume_token;
         this.name = r.name;
-        this.tunnelInfo = r.tunnel ?? null;
         this.backoff = 250;
         this.setState("open", "websocket");
         if (resuming && r.resumed) this.emit({ kind: "resumed", text: "the bridge session resumed" });
@@ -613,7 +608,6 @@ export class RantNode {
     }
 
     private binary(b: Uint8Array): void {
-        if (b[0] === UDP) { this.onUdp?.(b); return; }
         const f = parseFrame(b);
         if (!f) return;
         if (f.op === Op.Ping) { this.ping(f); return; }
@@ -643,21 +637,6 @@ export class RantNode {
         }
         const pong = buildPong(f);
         if (!this.carry(0, pong)) this.ws?.send(pong);
-    }
-
-    /* A batch of tunnel datagrams, on the tunnel channel while it is open, else the WebSocket.
-     * One carrier only, so datagrams keep their order. False past a socket's worth of backlog. */
-    /** @internal */ sendUdp(frame: Uint8Array): boolean {
-        const dc = this.channels.get(TUNNEL_CHANNEL);
-        if (dc && dc.readyState === "open") {
-            if (dc.bufferedAmount > TUNNEL_BACKLOG) return false;
-            dc.send(frame as any);
-            return true;
-        }
-        const ws = this.ws;
-        if (!ws || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > TUNNEL_BACKLOG) return false;
-        ws.send(frame);
-        return true;
     }
 
     /* The entity's data channel when it is open and has room, else the WebSocket. */
@@ -834,7 +813,6 @@ export class RantNode {
             if (e.candidate?.candidate) this.request({ op: "rtc", candidate: e.candidate.candidate, mid: e.candidate.sdpMid ?? "" }).catch(() => {});
         };
         this.openChannel(0, true);
-        if (this.opts.tunnel) this.openChannel(TUNNEL_CHANNEL, false);
         for (const h of this.handles.values()) this.openChannel(h.id, h.reliable);
         const up = new Promise<void>((res, rej) => {
             const t = setTimeout(() => rej(new Error("webrtc did not connect")), this.opts.rtcTimeoutMs ?? 4000);
@@ -892,11 +870,6 @@ export class RantNode {
 }
 
 type Val<S> = S extends Schema<any> ? Infer<S> : unknown;
-
-/* A tunnel batch's op, the data channel it rides, PROTOCOL.md, and the backlog a socket would hold. */
-const UDP = 9;
-const TUNNEL_CHANNEL = 1;
-const TUNNEL_BACKLOG = 4 << 20;
 
 function buildPong(f: Frame): Uint8Array {
     return buildFrame({ ...f, op: Op.Pong, payload: new Uint8Array(0), chunk: undefined });

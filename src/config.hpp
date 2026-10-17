@@ -25,8 +25,7 @@ struct Config {
     uint32_t                 grace_ms = 10000;
     uint32_t                 detach_ms = 3000;
     uint32_t                 max_connections = 32;
-    uint64_t                 max_message_bytes = 64ull << 20;
-    uint32_t                 queue_delay_warn_ms = 250;
+    uint64_t                 max_message_bytes = 1ull << 20;  /* the largest message a client may send */
 };
 
 /* $RANT_HOME, else ~/.rant. */

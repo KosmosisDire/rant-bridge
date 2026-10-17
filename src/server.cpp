@@ -67,6 +67,7 @@ public:
             std::shared_ptr<Conn> c;
             { std::lock_guard<std::mutex> g(mu_); auto it = conns_.find(id); if (it != conns_.end()) c = it->second; }
             if (!c) return;
+            if (msg->str.size() > cfg_.max_message_bytes) { ws.close(1009, "message too big"); return; }
             if (msg->binary) { if (c->session) c->session->on_binary((const uint8_t*)msg->str.data(), msg->str.size()); return; }
             json req = json::parse(msg->str, nullptr, false);
             if (req.is_discarded() || !req.is_object()) {
@@ -99,18 +100,17 @@ public:
         }
     }
 
-    /* Ends sessions whose client did not come back in time, or that nothing can drain. */
+    /* Ends sessions whose client did not come back in time. */
     void reap() {
         std::vector<std::shared_ptr<Session>> dead;
         {
             std::lock_guard<std::mutex> g(mu_);
             for (auto it = sessions_.begin(); it != sessions_.end();) {
-                bool over = it->second->detached_for() > std::chrono::milliseconds(cfg_.grace_ms);
-                if (over || it->second->overflowed()) { dead.push_back(it->second); it = sessions_.erase(it); }
+                if (it->second->detached_for() > std::chrono::milliseconds(cfg_.grace_ms)) { dead.push_back(it->second); it = sessions_.erase(it); }
                 else ++it;
             }
         }
-        dead.clear();      /* each session closes its node here, outside the lock */
+        dead.clear();      /* each session closes its sockets here, outside the lock */
     }
 
     void close_all() {

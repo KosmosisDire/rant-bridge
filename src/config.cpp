@@ -61,8 +61,7 @@ bool write_default_config(const fs::path& path) {
            "grace_ms: 10000               # how long a dropped client may resume its session\n"
            "detach_ms: 3000               # a silent client counts as dropped after this\n"
            "max_connections: 32\n"
-           "max_message_bytes: 67108864\n"
-           "queue_delay_warn_ms: 250\n";
+           "max_message_bytes: 1048576       # the largest message a client may send\n";
     out.close();
 #ifndef _WIN32
     /* the passphrase is a secret. On Windows the profile folder is already private */
@@ -196,7 +195,9 @@ Config load_config(const fs::path& path) {
         else if (key == "detach_ms") c.detach_ms = scalar<uint32_t>(path, key, v);
         else if (key == "max_connections") c.max_connections = scalar<uint32_t>(path, key, v);
         else if (key == "max_message_bytes") c.max_message_bytes = scalar<uint64_t>(path, key, v);
-        else if (key == "queue_delay_warn_ms") c.queue_delay_warn_ms = scalar<uint32_t>(path, key, v);
+        /* a setting of the per client nodes, gone with them: a config written before still loads */
+        else if (key == "queue_delay_warn_ms")
+            std::fprintf(stderr, "rant-bridge: %s: 'queue_delay_warn_ms' is no longer used, remove it\n", path.filename().string().c_str());
         else fail(path, kv.first, "unknown setting '" + key + "'");
     }
     return c;

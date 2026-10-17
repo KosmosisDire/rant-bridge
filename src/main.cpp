@@ -1,5 +1,5 @@
-/* rant-bridge: the bridge between Rant and WebSocket and WebRTC clients. README.md says how
- * to run it, PROTOCOL.md what it speaks. */
+/* rant-bridge: lends this host's UDP sockets to Rant nodes that run in pages, over WebSocket
+ * and WebRTC. README.md says how to run it, Rant's spec/tunnel.md what it speaks. */
 
 #include "config.hpp"
 #include "server.hpp"
@@ -20,7 +20,6 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <timeapi.h>
 #else
 #include <sys/wait.h>
 #include <unistd.h>
@@ -49,7 +48,7 @@ static void usage() {
     std::printf("usage: rant-bridge [--config PATH] [--log-file PATH] [--supervise]\n"
                 "       rant-bridge --init-config [--config PATH] [--bind IP] [--port N] [--pass TEXT]\n"
                 "       rant-bridge --version\n"
-                "Serves Rant to WebSocket and WebRTC clients. The config defaults to %s.\n"
+                "Lends this host's UDP sockets to Rant nodes in pages. The config defaults to %s.\n"
                 "--init-config writes it when missing. --bind and --port set where it listens and\n"
                 "--pass sets the passphrase, empty for none. A running bridge takes them at its next start.\n",
                 default_config_path().string().c_str());
@@ -257,8 +256,6 @@ int main(int argc, char** argv) {
     const char* under = std::getenv("RANT_BRIDGE_SUPERVISOR_PID");
     if (g_stop_event && !(under && *under)) ResetEvent(g_stop_event);
     SetConsoleCtrlHandler(on_console, TRUE);
-    /* 1 ms waits: the sender paces the WebSocket a chunk at a time, and 15 ms ticks would throttle it */
-    timeBeginPeriod(1);
 #else
     std::signal(SIGTERM, on_signal);
     std::signal(SIGINT, on_signal);

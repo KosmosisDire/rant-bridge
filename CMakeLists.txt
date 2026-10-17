@@ -1,5 +1,6 @@
-# The Rant bridge: one WebSocket connection is one Rant node, with a WebRTC data path.
-# CPM fetches Rant, IXWebSocket, nlohmann json, yaml-cpp, MbedTLS and libdatachannel.
+# The Rant bridge: lends this host's UDP sockets to Rant nodes in pages, over WebSocket and
+# WebRTC. CPM fetches IXWebSocket, nlohmann json, yaml-cpp, MbedTLS and libdatachannel, and Rant
+# for its build helpers and for the client the tests run.
 
 cmake_minimum_required(VERSION 3.21)
 
@@ -34,7 +35,8 @@ if(CMAKE_HOST_WIN32 AND NOT PATCH_EXECUTABLE)
   endif()
 endif()
 
-# A release pins the newest Rant. The local presets set CPM_rant_SOURCE to ../rant.
+# A release pins the newest Rant, whose tunnel client must speak this bridge's protocol. The
+# local presets set CPM_rant_SOURCE to ../rant.
 CPMAddPackage(NAME rant
   GITHUB_REPOSITORY KosmosisDire/Rant
   VERSION 0.0.28
@@ -51,7 +53,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # TLS and zlib off: the bridge sits behind a tunnel or on localhost, and raw speed matters.
-# The patch lets a connection read while it sends, drops wsock32, which would take Rant's
+# The patch lets a connection read while it sends, drops wsock32, which would take the tunnel's
 # socket calls on Windows and break its multicast, and keeps a second bridge off the port of a
 # running one on Windows.
 CPMAddPackage(NAME ixwebsocket
@@ -74,7 +76,7 @@ CPMAddPackage(NAME yaml-cpp
   OPTIONS "YAML_CPP_BUILD_TESTS OFF" "YAML_CPP_BUILD_TOOLS OFF" "YAML_CPP_BUILD_CONTRIB OFF"
           "YAML_BUILD_SHARED_LIBS OFF" "YAML_CPP_INSTALL OFF" "CMAKE_POLICY_VERSION_MINIMUM 3.5")
 
-# MbedTLS is the DTLS and SRTP backend. Its release tarball ships generated sources, so
+# MbedTLS is the DTLS backend. Its release tarball ships generated sources, so
 # no perl or python runs at build time. Not named mbedtls: CPM's stand in finder for that
 # name would shadow our FindMbedTLS on a case insensitive file system.
 set(MBEDTLS_USER_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/mbedtls_user_config.h" CACHE FILEPATH "" FORCE)
@@ -85,7 +87,8 @@ CPMAddPackage(NAME mbedtls_release
   OPTIONS "ENABLE_PROGRAMS OFF" "ENABLE_TESTING OFF" "MBEDTLS_FATAL_WARNINGS OFF" "GEN_FILES OFF"
           "DISABLE_PACKAGE_CONFIG_AND_INSTALL ON")
 
-# Our FindMbedTLS maps the fetched MbedTLS onto the names libdatachannel and libSRTP look for.
+# Our FindMbedTLS maps the fetched MbedTLS onto the names libdatachannel looks for. Data
+# channels only, no media.
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(CMAKE_SKIP_INSTALL_RULES ON)
 set(BUILD_SHARED_LIBS OFF)
@@ -93,10 +96,10 @@ CPMAddPackage(NAME libdatachannel
   GITHUB_REPOSITORY paullouisageneau/libdatachannel
   GIT_TAG v0.23.3
   EXCLUDE_FROM_ALL YES
-  GIT_SUBMODULES "deps/libjuice" "deps/usrsctp" "deps/plog" "deps/libsrtp"
+  GIT_SUBMODULES "deps/libjuice" "deps/usrsctp" "deps/plog"
   GIT_SUBMODULES_RECURSE FALSE
-  OPTIONS "USE_MBEDTLS ON" "NO_WEBSOCKET ON" "NO_EXAMPLES ON" "NO_TESTS ON" "NO_MEDIA OFF"
-          "LIBSRTP_TEST_APPS OFF" "ENABLE_WARNINGS_AS_ERRORS OFF")
+  OPTIONS "USE_MBEDTLS ON" "NO_WEBSOCKET ON" "NO_EXAMPLES ON" "NO_TESTS ON" "NO_MEDIA ON"
+          "ENABLE_WARNINGS_AS_ERRORS OFF")
 
 option(RANT_BRIDGE_TESTS "Build the tests" ${PROJECT_IS_TOP_LEVEL})
 if(RANT_BRIDGE_TESTS)

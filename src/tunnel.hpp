@@ -2,7 +2,7 @@
 
 /* A tunnel session's sockets: real UDP sockets on this host, used by a Rant node that runs
  * in the client (Rant built to wasm) as if it ran here. The bridge moves datagrams and never
- * reads them. PROTOCOL.md has the ops. */
+ * reads them. Rant's spec/tunnel.md has the ops. */
 
 #include <atomic>
 #include <cstdint>
@@ -16,10 +16,16 @@
 
 namespace bridge {
 
+/* Datagrams travel batched: [u8 9][u8 flags], then per datagram [u16 sock][4 ip][u16 port]
+ * [4 via][u16 len][payload], the address bytes in network order, under kUdpBatch bytes. */
+constexpr uint8_t kUdpOp = 9;
+constexpr size_t  kUdpRecord = 14;
+constexpr size_t  kUdpBatch = 60000;
+
 class Tunnel {
 public:
-    /* A batch of datagrams for the client, a whole frame (frame.hpp). Runs on the tunnel's own
-     * thread, once for what one wake drained. */
+    /* A batch of datagrams for the client. Runs on the tunnel's own thread, once for what one
+     * wake drained. */
     using Deliver = std::function<void(const std::string& batch)>;
 
     struct Iface { uint32_t addr, mask; };     /* network byte order */

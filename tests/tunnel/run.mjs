@@ -1,5 +1,5 @@
-// The tunnel benchmark: Rant built to wasm in a page through TunnelNet, against today's
-// entity protocol through RantNode, against Rant in Node.js over real UDP and native Rant.
+// The tunnel benchmark: Rant built to wasm in a page through TunnelNet, against Rant in Node.js
+// through the tunnel and over real UDP, and native Rant.
 // Every pinger talks to the same native echo node. Run from the bridge checkout:
 //
 //   node tests/tunnel/run.mjs [--rant-web PATH] [--only WORKLOAD,...] [--clients NAME,...]
@@ -31,7 +31,7 @@ const HTTP = 8095, BRIDGE = 7490, CDP = 9333;
 /* EXTERNAL: a bridge and a reliable echo already run at BRIDGE_HOST, such as in WSL */
 const HOST = process.env.BRIDGE_HOST ?? "127.0.0.1";
 const EXTERNAL = !!process.env.EXTERNAL;
-const PAGES = new Set(["tunnel-webrtc", "tunnel-ws", "client-webrtc", "client-ws"]);
+const PAGES = new Set(["tunnel-webrtc", "tunnel-ws"]);
 const exe = (p) => (process.platform === "win32" ? p + ".exe" : p);
 const benchExe = join(rantWeb, "bin", exe("rant_web_bench"));
 const bridgeExe = process.env.BRIDGE_EXE ?? join(bridgeRoot, "bin", exe("rant-bridge"));
@@ -65,8 +65,7 @@ function cpuMs(pid) {
 
 const types = { ".html": "text/html", ".mjs": "text/javascript", ".js": "text/javascript", ".wasm": "application/wasm" };
 function serve() {
-    const roots = [["/wasm/", join(rantWeb, "bin", "web")], ["/rant/", join(rantWeb, "bindings", "web", "dist")],
-                   ["/client/", join(bridgeRoot, "client", "dist")], ["/", here]];
+    const roots = [["/wasm/", join(rantWeb, "bin", "web")], ["/rant/", join(rantWeb, "bindings", "web", "dist")], ["/", here]];
     const server = createServer((req, res) => {
         const path = decodeURIComponent(req.url.split("?")[0]);
         for (const [prefix, dir] of roots) {
@@ -163,8 +162,8 @@ function printProfile(p) {
 
 /* ---- one run ---- */
 
-async function page(mode, transport, args, rate) {
-    const url = `http://127.0.0.1:${HTTP}/bench.html?mode=${mode}&transport=${transport}&bridge=ws://${HOST}:${BRIDGE}` +
+async function page(transport, args, rate) {
+    const url = `http://127.0.0.1:${HTTP}/bench.html?transport=${transport}&bridge=ws://${HOST}:${BRIDGE}` +
                 `&pass=bench&args=${args.join(",")}`;
     const c = await Cdp.open("about:blank");
     await c.send("Performance.enable");
@@ -208,10 +207,8 @@ const clients = [
     ["native", (a) => proc(benchExe, a)],
     ["wasm-node", (a) => proc(process.execPath, [join(rantWeb, "bindings", "web", "bench", "node.mjs"), ...a])],
     ["tunnel-node", (a) => proc(process.execPath, [join(here, "node-tunnel.mjs"), `ws://${HOST}:${BRIDGE}`, ...a])],
-    ["tunnel-webrtc", (a) => page("wasm", "auto", a, throttle)],
-    ["tunnel-ws", (a) => page("wasm", "websocket", a, throttle)],
-    ["client-webrtc", (a) => page("client", "auto", a, throttle)],
-    ["client-ws", (a) => page("client", "websocket", a, throttle)],
+    ["tunnel-webrtc", (a) => page("auto", a, throttle)],
+    ["tunnel-ws", (a) => page("websocket", a, throttle)],
 ];
 
 const workloads = [

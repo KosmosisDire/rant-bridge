@@ -74,6 +74,26 @@ try {
     await until(() => got.some((x) => x.id === g), 3000);
     check(got.some((x) => x.id === g && x.text === "group"), "a group joined on loopback delivers to the client");
 
+    /* a whole node through the tunnel, against one on this host's own sockets */
+    const { openNode, struct, f64, string } = await import(pathToFileURL(join(pkg, "dist/rant.js")).href);
+    const domain = 150 + (process.pid % 10);
+    const Reading = struct("Reading", { value: f64, where: string(16) });
+    const page = await openNode("page", { net, domain, multicastInterface: "127.0.0.1" });
+    const host = await openNode("host", { domain, multicastInterface: "127.0.0.1" });
+    const seen = [];
+    page.subscriber("reading", Reading, (v) => seen.push(v), { reliable: true });
+    page.functionDefinition("Twice", (v) => ({ value: v.value * 2, where: "page" }), Reading, Reading);
+    const pub = host.publisher("reading", Reading, { reliable: true });
+    const twice = host.remoteFunction("Twice", Reading, Reading);
+    await until(() => pub.matchCount === 1 && twice.matchCount === 1, 10000);
+    pub.send({ value: 1.5, where: "host" });
+    await until(() => seen.length > 0, 3000);
+    check(seen[0]?.value === 1.5 && seen[0]?.where === "host", "a node through the tunnel hears a node on this host");
+    const r = await twice.call({ value: 4, where: "" });
+    check(r.ok && r.value?.value === 8, "a node on this host calls a function a node through the tunnel answers");
+    page.close();
+    host.close();
+
     bridge.kill();
     await sleep(300);
     bridge = start();

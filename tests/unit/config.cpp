@@ -29,6 +29,10 @@ int main() {
     c = load_config(p);
     CHECK(c.ice.size() == 1 && c.ice[0].username == "u" && c.rtc_port_lo == 50000 && c.rtc_port_hi == 50010);
 
+    /* a setting the bridge dropped still loads, so an older config keeps the bridge running */
+    std::ofstream(p) << "port: 7481\nqueue_delay_warn_ms: 250\n";
+    CHECK(load_config(p).port == 7481);
+
     /* set_config: a key's line in place with its comment, a missing key added, a bad value undone */
     std::ofstream(p) << "port: 7480        # the port\npassphrase: x\n";
     set_config(p, { { "port", "7999" }, { "bind", "127.0.0.1" } });

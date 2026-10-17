@@ -1,5 +1,4 @@
 #include "tunnel.hpp"
-#include "frame.hpp"
 
 #include <cstring>
 #include <stdexcept>
@@ -213,7 +212,7 @@ void Tunnel::run() {
     std::string batch;
     auto flush = [&] {
         if (batch.size() > 2) deliver_(batch);
-        batch.assign({ (char)OpUdp, 0 });
+        batch.assign({ (char)kUdpOp, 0 });
     };
     flush();
     std::vector<pollfd> fds;

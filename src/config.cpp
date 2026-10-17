@@ -71,6 +71,21 @@ bool write_default_config(const fs::path& path) {
     return true;
 }
 
+/* Where a line's comment starts, or stop: a # after a space and outside quotes, as YAML reads it. */
+static size_t comment_at(const std::string& text, size_t at, size_t stop) {
+    char quote = 0;
+    for (size_t i = at; i < stop; i++) {
+        char c = text[i];
+        if (quote) {
+            if (c == '\\' && quote == '"') i++;
+            else if (c == quote) quote = 0;
+        }
+        else if (c == '"' || c == '\'') quote = c;
+        else if (c == '#' && i > at && (text[i - 1] == ' ' || text[i - 1] == '\t')) return i;
+    }
+    return stop;
+}
+
 void set_config(const fs::path& path, const std::vector<std::pair<std::string, std::string>>& values) {
     write_default_config(path);
     std::string before;
@@ -89,8 +104,8 @@ void set_config(const fs::path& path, const std::vector<std::pair<std::string, s
             size_t stop = end > at && text[end - 1] == '\r' ? end - 1 : end;
             if (text.compare(at, head.size(), head) == 0) {
                 /* the new value in the old one's width, so the comment stays in its column */
-                size_t hash = text.find('#', at);
-                std::string comment = hash < stop ? text.substr(hash, stop - hash) : "";
+                size_t hash = comment_at(text, at + head.size(), stop);
+                std::string comment = text.substr(hash, stop - hash);
                 std::string set = head + " " + value;
                 if (!comment.empty()) {
                     size_t width = hash - at;

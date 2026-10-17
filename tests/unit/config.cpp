@@ -42,6 +42,18 @@ int main() {
     std::string after((std::istreambuf_iterator<char>(again)), std::istreambuf_iterator<char>());
     again.close();
     CHECK(undone && after == text);
+
+    /* a # inside a quoted value or a word is not a comment, and an empty quoted passphrase means none */
+    std::ofstream(p) << "passphrase: \"a #b\"   # secret\nbind: x#y\n";
+    set_config(p, { { "passphrase", "\"\"" } });
+    std::ifstream third(p);
+    std::string emptied((std::istreambuf_iterator<char>(third)), std::istreambuf_iterator<char>());
+    third.close();
+    CHECK(emptied == "passphrase: \"\"       # secret\nbind: x#y\n");
+    c = load_config(p);
+    CHECK(c.passphrase.empty() && c.bind == "x#y");
+    set_config(p, { { "passphrase", "\"q\\\"#1\"" } });
+    CHECK(load_config(p).passphrase == "q\"#1");
     fs::remove_all(dir);
     return finish();
 }

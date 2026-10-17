@@ -47,11 +47,11 @@ static bool stop_requested() { return g_stop.load(); }
 
 static void usage() {
     std::printf("usage: rant-bridge [--config PATH] [--log-file PATH] [--supervise]\n"
-                "       rant-bridge --init-config [--config PATH] [--bind IP] [--port N]\n"
+                "       rant-bridge --init-config [--config PATH] [--bind IP] [--port N] [--pass TEXT]\n"
                 "       rant-bridge --version\n"
                 "Serves Rant to WebSocket and WebRTC clients. The config defaults to %s.\n"
-                "--init-config writes it when missing, and --bind and --port set where it listens,\n"
-                "which a running bridge takes at its next start.\n",
+                "--init-config writes it when missing. --bind and --port set where it listens and\n"
+                "--pass sets the passphrase, empty for none. A running bridge takes them at its next start.\n",
                 default_config_path().string().c_str());
 }
 
@@ -68,6 +68,18 @@ static bool dotted_ipv4(const std::string& s) {
         at = dot + 1;
     }
     return parts == 4;
+}
+
+/* A YAML double quoted scalar, so any printable text survives as the passphrase. */
+static bool yaml_quoted(const std::string& s, std::string& out) {
+    out = "\"";
+    for (unsigned char c : s) {
+        if (c < 0x20 || c == 0x7f) return false;
+        if (c == '"' || c == '\\') out += '\\';
+        out += (char)c;
+    }
+    out += '"';
+    return true;
 }
 
 /* Output goes to the log file, else to the terminal that started us, if any. */
@@ -190,8 +202,8 @@ static int supervise(const char* self, const std::vector<std::string>& args) {
 }
 
 int main(int argc, char** argv) {
-    std::string config = default_config_path().string(), log_file, bind, port;
-    bool init = false, sup = false;
+    std::string config = default_config_path().string(), log_file, bind, port, pass;
+    bool init = false, sup = false, has_pass = false;
     std::vector<std::string> child_args;    /* what a supervised child gets: everything but --supervise */
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
@@ -202,10 +214,11 @@ int main(int argc, char** argv) {
         else if (a == "--init-config") init = true;
         else if (a == "--bind" && has_value) bind = argv[++i];
         else if (a == "--port" && has_value) port = argv[++i];
+        else if (a == "--pass" && has_value) { pass = argv[++i]; has_pass = true; }
         else if (a == "--version") { std::printf("%s\n", RANT_BRIDGE_VERSION); return 0; }
         else { usage(); return a == "--help" || a == "-h" ? 0 : 2; }
     }
-    if ((!bind.empty() || !port.empty()) && !init) { usage(); return 2; }
+    if ((!bind.empty() || !port.empty() || has_pass) && !init) { usage(); return 2; }
     if (init) {
         std::vector<std::pair<std::string, std::string>> set;
         if (!bind.empty()) {
@@ -217,13 +230,23 @@ int main(int argc, char** argv) {
             if (p < 1 || p > 65535) { std::fprintf(stderr, "rant-bridge: --port takes a number from 1 to 65535\n"); return 2; }
             set.push_back({ "port", std::to_string(p) });
         }
+        if (has_pass) {
+            std::string quoted;
+            if (!yaml_quoted(pass, quoted)) { std::fprintf(stderr, "rant-bridge: --pass takes one line of printable text\n"); return 2; }
+            set.push_back({ "passphrase", quoted });
+        }
         try {
             bool made = !fs::exists(config);
             if (set.empty()) write_default_config(config);
             else set_config(config, set);
             std::printf("%s\n", config.c_str());
-            if (made) std::fprintf(stderr, "wrote a new config with a fresh passphrase\n");
-            for (const auto& [key, value] : set) std::fprintf(stderr, "set %s to %s\n", key.c_str(), value.c_str());
+            if (made && !has_pass) std::fprintf(stderr, "wrote a new config with a fresh passphrase\n");
+            else if (made) std::fprintf(stderr, "wrote a new config\n");
+            for (const auto& [key, value] : set) {
+                if (key != "passphrase") std::fprintf(stderr, "set %s to %s\n", key.c_str(), value.c_str());
+                else if (pass.empty()) std::fprintf(stderr, "removed the passphrase: anyone who reaches the port can use the mesh\n");
+                else std::fprintf(stderr, "set the passphrase\n");
+            }
             return 0;
         } catch (const std::exception& e) { std::fprintf(stderr, "rant-bridge: %s\n", e.what()); return 1; }
     }

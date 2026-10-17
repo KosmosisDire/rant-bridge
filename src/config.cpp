@@ -58,7 +58,7 @@ bool write_default_config(const fs::path& path) {
            "rtc_ports: \"\"                 # \"50000-50100\" pins WebRTC to a range, empty = any\n"
            "mtu: 1200\n"
            "grace_ms: 10000               # how long a dropped client may resume its session\n"
-           "detach_ms: 1000               # a silent client counts as dropped after this\n"
+           "detach_ms: 3000               # a silent client counts as dropped after this\n"
            "max_connections: 32\n"
            "max_message_bytes: 67108864\n"
            "queue_delay_warn_ms: 250\n";

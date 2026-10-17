@@ -22,7 +22,7 @@ struct Config {
     uint16_t                 rtc_port_lo = 0, rtc_port_hi = 0;
     uint32_t                 mtu = 1200;
     uint32_t                 grace_ms = 10000;
-    uint32_t                 detach_ms = 1000;
+    uint32_t                 detach_ms = 3000;
     uint32_t                 max_connections = 32;
     uint64_t                 max_message_bytes = 64ull << 20;
     uint32_t                 queue_delay_warn_ms = 250;

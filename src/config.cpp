@@ -45,7 +45,7 @@ bool write_default_config(const fs::path& path) {
     if (!out) throw std::runtime_error("cannot write " + path.string());
     out << "# Rant bridge settings. Apply a change with: rant bridge restart\n"
            "port: 7480\n"
-           "bind: 127.0.0.1               # 0.0.0.0 exposes the bridge to the network\n"
+           "bind: 0.0.0.0                 # every interface, 127.0.0.1 keeps it to this computer\n"
            "passphrase: " << new_passphrase() << "\n"
            "allowed_origins: []           # browser origins allowed to connect, empty = any\n"
            "ice:\n"

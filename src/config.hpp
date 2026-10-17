@@ -14,7 +14,7 @@ struct IceServer {
 /* The bridge settings, read from bridge.yaml. Every field has a working default. */
 struct Config {
     uint16_t                 port = 7480;
-    std::string              bind = "127.0.0.1";
+    std::string              bind = "0.0.0.0";
     std::string              passphrase;            /* empty = no passphrase asked */
     std::vector<std::string> allowed_origins;       /* empty = any origin */
     std::vector<IceServer>   ice;

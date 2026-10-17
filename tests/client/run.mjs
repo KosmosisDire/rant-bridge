@@ -11,7 +11,7 @@ const exe = process.argv[2];
 const port = 7600 + Math.floor(Math.random() * 300);
 const home = mkdtempSync(join(tmpdir(), "rant-bridge-test-"));
 writeFileSync(join(home, "bridge.yaml"),
-    `port: ${port}\npassphrase: test-pass\ngrace_ms: 1500\ndetach_ms: 1000\nice: []\n`);
+    `port: ${port}\nbind: 127.0.0.1\npassphrase: test-pass\ngrace_ms: 1500\ndetach_ms: 1000\nice: []\n`);
 
 const bridge = spawn(exe, ["--config", join(home, "bridge.yaml")], { env: { ...process.env, RANT_HOME: home }, stdio: ["ignore", "pipe", "pipe"] });
 let log = "";

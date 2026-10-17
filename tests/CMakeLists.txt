@@ -16,9 +16,7 @@ foreach(name auth config mdns)
 endforeach()
 
 find_program(NODE node)
-# Rant's native client, from the Rant that has one
-file(STRINGS "${rant_SOURCE_DIR}/dist/rant.h" _rant_native_tunnel REGEX "RANT_E_BRIDGE" LIMIT_COUNT 1)
-if(NODE AND _rant_native_tunnel)
+if(NODE)
   find_package(Threads REQUIRED)
   add_executable(tunnel_native tunnel/native.c)
   target_link_libraries(tunnel_native PRIVATE rant::rant Threads::Threads)
@@ -27,8 +25,7 @@ if(NODE AND _rant_native_tunnel)
   endif()
   add_test(NAME tunnel.native COMMAND "${NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tunnel/native.mjs"
            "$<TARGET_FILE:rant-bridge>" "$<TARGET_FILE:tunnel_native>")
-endif()
-if(NODE)
+
   # Rant's web package: the local checkout's when building against one, else the pinned
   # release's, fetched once.
   if(CPM_rant_SOURCE AND EXISTS "${CPM_rant_SOURCE}/bindings/web/dist/rant_wasm.mjs")

@@ -241,7 +241,13 @@ json Session::reopen_reply() const {
     if (tunnel_) {
         json ifs = json::array();
         for (const Tunnel::Iface& f : Tunnel::interfaces()) ifs.push_back({ {"addr", dotted(f.addr)}, {"mask", dotted(f.mask)} });
-        r["tunnel"] = { {"interfaces", ifs} };
+        /* a POSIX host hands group traffic only to a socket bound to any address */
+#ifdef _WIN32
+        const bool group_binds_any = false;
+#else
+        const bool group_binds_any = true;
+#endif
+        r["tunnel"] = { {"interfaces", ifs}, {"group_binds_any", group_binds_any} };
     }
     return r;
 }

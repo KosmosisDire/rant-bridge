@@ -166,39 +166,11 @@ A `msg_lost` with `peer: 0` means the bridge dropped best effort messages for th
 
 ## Tunnel
 
-A client that runs its own Rant node (Rant built to wasm, `rant/bindings/web`) opens with
-`"tunnel": true`. The bridge opens no node for it and lends it UDP sockets on its host
-instead, so the client's node is a node of that host to the mesh. The bridge never reads
-the datagrams. `client/src/tunnel.ts` is the reference.
-
-- The open reply adds `tunnel: {interfaces: [{addr, mask}]}`, the host's IPv4 interfaces,
-  dotted. The other node and entity ops answer an error.
-- Sockets are numbered by the client, 1 to 65535, at most 16 at once.
-
-| Op | Keys | Reply |
-|---|---|---|
-| `udp_bind` | `sock`, `port` (0 for any), `if` (dotted, default any), `reuse` | `{port}`, the bound port. A bound `sock` is rebound. |
-| `udp_member` | `sock`, `group`, `if`, `join` (default true) | `{}` |
-| `udp_option` | `sock`, any of `ttl`, `loop`, `own_groups` | `{}` |
-| `udp_close` | `sock` | `{}` |
-
-Datagrams travel batched, both ways: one binary message carries one or more, up to 60000
-bytes in all.
-
-```
-[u8 9][u8 flags]  then per datagram  [u16 sock][4 ip][u16 port][4 via][u16 len][payload]
-```
-
-- `ip` is the destination toward the bridge and the source toward the client, in network
-  byte order. `via` is the interface to send a group datagram out of, 0 for the default,
-  and 0 toward the client. `flags` is 0.
-- A side batches what it sends in one go: the client what one task sends, the bridge what
-  one wake of its sockets drained.
-- Batches ride data channel 1 (unordered, no retransmits) while it is open, else the
-  WebSocket, never both at once, so datagrams keep their order. A batch that finds more
-  than 4 MB waiting is dropped, as a full socket drops datagrams.
-- The bridge sends only to 239/8, to loopback and to addresses on its host's subnets, so
-  it relays nothing beyond the mesh.
+A client that runs its own Rant node (Rant built to wasm) opens with `"tunnel": true`. The
+bridge opens no node for it and lends it UDP sockets on its host instead, so the client's
+node is a node of that host to the mesh. The bridge never reads the datagrams. Rant owns
+this part of the protocol: its `spec/tunnel.md` has the socket ops, the batched datagram
+frame and the `tunnel` field of the open reply, and its `TunnelNet` is the client.
 
 ## Data plane
 

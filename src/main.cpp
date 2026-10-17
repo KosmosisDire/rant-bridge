@@ -82,19 +82,32 @@ static long self_pid() {
 }
 
 /* The supervisor's pid when one runs us, so rant bridge stop ends the pair. */
-static void write_state(const std::string& url) {
+static long state_pid() {
     const char* sup = std::getenv("RANT_BRIDGE_SUPERVISOR_PID");
+    return sup && *sup ? std::atol(sup) : self_pid();
+}
+
+static void write_state(const std::string& url) {
     fs::path p = state_path();
     std::error_code ec;
     fs::create_directories(p.parent_path(), ec);
     std::ofstream out(p, std::ios::binary | std::ios::trunc);
-    out << "pid: " << (sup && *sup ? std::atol(sup) : self_pid()) << "\n"
+    out << "pid: " << state_pid() << "\n"
         << "url: " << url << "\n"
         << "version: " << RANT_BRIDGE_VERSION << "\n"
         << "started: " << (long long)std::time(nullptr) << "\n";
 }
 
+/* Only while the state is still ours: a bridge started as this one was ending owns it then. */
 static void remove_state() {
+    long pid = 0;
+    {
+        std::ifstream in(state_path());
+        std::string line;
+        while (std::getline(in, line))
+            if (line.rfind("pid: ", 0) == 0) pid = std::atol(line.c_str() + 5);
+    }
+    if (pid != state_pid()) return;
     std::error_code ec;
     fs::remove(state_path(), ec);
 }

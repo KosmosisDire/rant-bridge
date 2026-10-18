@@ -108,7 +108,7 @@ try {
     const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
     const answer = await new Promise((resolve, reject) => {
         ws.onerror = () => reject(new Error("cannot reach the bridge"));
-        ws.onopen = () => ws.send(JSON.stringify({ op: "open", seq: 1, proto: 14, passphrase: "tunnel-test" }));
+        ws.onopen = () => ws.send(JSON.stringify({ op: "open", seq: 1, proto: 15, passphrase: "tunnel-test" }));
         ws.onmessage = (m) => resolve(JSON.parse(String(m.data)));
     });
     ws.close();

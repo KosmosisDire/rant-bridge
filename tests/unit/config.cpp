@@ -18,7 +18,7 @@ int main() {
     CHECK(write_default_config(p));
     CHECK(!write_default_config(p));       /* never overwrites */
     Config c = load_config(p);
-    CHECK(c.port == 7480 && c.bind == "0.0.0.0" && c.passphrase.size() == 34 && c.ice.size() == 2);
+    CHECK(c.port == kDefaultPort && c.bind == "0.0.0.0" && c.passphrase.size() == 34 && c.ice.size() == 2);
 
     std::ofstream(p) << "port: 9000\nprot: 1\n";
     bool refused = false;

@@ -1,4 +1,5 @@
 #include "mdns.hpp"
+#include "config.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -233,7 +234,7 @@ Finder::Finder(std::vector<Iface> ifaces, uint16_t port, std::string version)
     : ifaces_(std::move(ifaces)), port_(port), version_(std::move(version)) {
     host_name_ = host_name();
     /* a second bridge on this host is told apart by its port */
-    std::string inst = port_ == 7480 ? host_name_ : host_name_ + " (" + std::to_string(port_) + ")";
+    std::string inst = port_ == kDefaultPort ? host_name_ : host_name_ + " (" + std::to_string(port_) + ")";
     instance_ = inst.substr(0, 63) + "." + mdns::kService;
     host_ = "rant-bridge-" + label(host_name_) + ".local";
     if (ifaces_.empty()) return;

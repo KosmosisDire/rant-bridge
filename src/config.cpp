@@ -45,7 +45,7 @@ bool write_default_config(const fs::path& path) {
     std::ofstream out(path, std::ios::binary);
     if (!out) throw std::runtime_error("cannot write " + path.string());
     out << "# Rant bridge settings. Apply a change with: rant bridge restart\n"
-           "port: 7480\n"
+           "port: " << kDefaultPort << "\n"
            "bind: 0.0.0.0                 # 0.0.0.0 every interface, 127.0.0.1 this computer only\n"
            "passphrase: " << new_passphrase() << "\n"
            "allowed_origins: []           # browser origins allowed to connect, empty = any\n"
@@ -57,7 +57,7 @@ bool write_default_config(const fs::path& path) {
            "#   credential: secret\n"
            "webrtc: true\n"
            "advertise: true               # answer rant-bridges.local and list the bridges on this network\n"
-           "rtc_ports: \"\"                 # \"50000-50100\" pins WebRTC to a range, empty = any\n"
+           "rtc_ports: \"\"                 # \"6740-6759\" pins WebRTC to a range, empty = any\n"
            "mtu: 1200\n"
            "grace_ms: 10000               # how long a dropped client may resume its session\n"
            "detach_ms: 3000               # a silent client counts as dropped after this\n"
@@ -185,7 +185,7 @@ Config load_config(const fs::path& path) {
             if (!r.empty()) {
                 unsigned lo = 0, hi = 0;
                 if (std::sscanf(r.c_str(), "%u-%u", &lo, &hi) != 2 || lo < 1 || hi < lo || hi > 65535)
-                    fail(path, v, "'rtc_ports' wants a range like 50000-50100");
+                    fail(path, v, "'rtc_ports' wants a range like 6740-6759");
                 c.rtc_port_lo = (uint16_t)lo; c.rtc_port_hi = (uint16_t)hi;
             }
         }

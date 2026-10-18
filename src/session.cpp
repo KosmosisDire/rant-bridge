@@ -279,7 +279,6 @@ void Session::op_udp(const std::string& op, const json& req, const json& seq) {
     } else if (op == "udp_option") {
         if (req.contains("ttl")) tunnel_->ttl(sock, req.value("ttl", 1));
         if (req.contains("loop")) tunnel_->loop(sock, req.value("loop", true));
-        if (req.value("own_groups", false)) tunnel_->own_groups(sock);
         reply(seq, {});
     } else if (op == "udp_close") {
         tunnel_->close(sock);

@@ -85,6 +85,12 @@ void Tunnel::membership(uint16_t sock, uint32_t group, uint32_t if_naddr, bool j
     ip_mreq m{};
     m.imr_multiaddr.s_addr = group;
     m.imr_interface.s_addr = if_naddr;
+#ifdef IP_MULTICAST_ALL
+    if (join) {     /* Linux otherwise hands the socket every group any socket here joined */
+        int off = 0;
+        setsockopt(s->fd, IPPROTO_IP, IP_MULTICAST_ALL, (const char*)&off, sizeof off);
+    }
+#endif
     if (setsockopt(s->fd, IPPROTO_IP, join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP, (const char*)&m, sizeof m) != 0 && join)
         throw std::runtime_error(failed("joining the group"));
 }
@@ -105,17 +111,6 @@ void Tunnel::loop(uint16_t sock, bool on) {
     setsockopt(it->second->fd, IPPROTO_IP, IP_MULTICAST_LOOP, (const char*)&v, sizeof v);
 }
 
-void Tunnel::own_groups(uint16_t sock) {
-#ifdef IP_MULTICAST_ALL
-    std::lock_guard<std::mutex> g(mu_);
-    auto it = socks_.find(sock);
-    if (it == socks_.end()) return;
-    int v = 0;
-    setsockopt(it->second->fd, IPPROTO_IP, IP_MULTICAST_ALL, (const char*)&v, sizeof v);
-#else
-    (void)sock;
-#endif
-}
 
 void Tunnel::close(uint16_t sock) {
     std::shared_ptr<Sock> s;

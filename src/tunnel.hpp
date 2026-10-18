@@ -38,11 +38,11 @@ public:
     /* Binds socket sock, made anew, to port on if_naddr (0 for every address). Returns the
      * bound port. Throws std::runtime_error with the reason. */
     uint16_t bind(uint16_t sock, uint32_t if_naddr, uint16_t port, bool reuse);
-    /* Joins or leaves a multicast group. Throws std::runtime_error. */
+    /* Joins or leaves a multicast group. A joined socket hears only its own groups, so a
+     * node never reads another domain's. Throws std::runtime_error. */
     void membership(uint16_t sock, uint32_t group, uint32_t if_naddr, bool join);
     void ttl(uint16_t sock, int ttl);
     void loop(uint16_t sock, bool on);
-    void own_groups(uint16_t sock);
     void close(uint16_t sock);
 
     /* Sends a datagram from the client. via is the outgoing interface for a group, 0 for the

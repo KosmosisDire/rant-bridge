@@ -12,9 +12,11 @@ struct IceServer {
     std::string urls, username, credential;
 };
 
+constexpr uint16_t kDefaultPort = 6731;     /* Rant's ports are 6730 to 6739 */
+
 /* The bridge settings, read from bridge.yaml. Every field has a working default. */
 struct Config {
-    uint16_t                 port = 7480;
+    uint16_t                 port = kDefaultPort;
     std::string              bind = "0.0.0.0";
     std::string              passphrase;            /* empty = no passphrase asked */
     std::vector<std::string> allowed_origins;       /* empty = any origin */

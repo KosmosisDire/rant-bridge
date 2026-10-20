@@ -39,6 +39,29 @@ static BOOL WINAPI on_console(DWORD) { g_stop = true; return TRUE; }
 static bool stop_requested() {
     return g_stop || (g_stop_event && WaitForSingleObject(g_stop_event, 0) == WAIT_OBJECT_0);
 }
+
+static LRESULT CALLBACK on_window(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_CLOSE) {
+        g_stop = true;
+        return 0;
+    }
+    return DefWindowProcW(w, msg, wp, lp);
+}
+
+/* rant stop, as taskkill does, asks a program with no console to close its windows, so a
+ * hidden one stands for the bridge */
+static void close_on_window() {
+    std::thread([] {
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = on_window;
+        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.lpszClassName = L"rant-bridge";
+        RegisterClassW(&wc);
+        if (!CreateWindowExW(0, wc.lpszClassName, L"rant-bridge", 0, 0, 0, 0, 0, nullptr, nullptr, wc.hInstance, nullptr)) return;
+        MSG m;
+        while (GetMessageW(&m, nullptr, 0, 0) > 0) DispatchMessageW(&m);
+    }).detach();
+}
 #else
 static void on_signal(int) { g_stop = true; }
 static bool stop_requested() { return g_stop.load(); }
@@ -257,6 +280,7 @@ int main(int argc, char** argv) {
     const char* under = std::getenv("RANT_BRIDGE_SUPERVISOR_PID");
     if (g_stop_event && !(under && *under)) ResetEvent(g_stop_event);
     SetConsoleCtrlHandler(on_console, TRUE);
+    close_on_window();
 #else
     std::signal(SIGTERM, on_signal);
     std::signal(SIGINT, on_signal);

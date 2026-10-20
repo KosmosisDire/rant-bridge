@@ -79,7 +79,7 @@ jobs:
           chmod +x bin/*
           for image in rockylinux:8 debian:10 ubuntu:20.04 ubuntu:22.04 ubuntu:24.04; do
             echo "== $image"
-            docker run --rm -v "$PWD/bin:/b" "$image" sh -c               'b=$(ls /b/rant-bridge-*) && $b --version && $b --init-config --config /tmp/b.yaml && { timeout 3 $b --config /tmp/b.yaml 2>&1 || true; } | grep -q listening'
+            docker run --rm -v "$PWD/bin:/b" "$image" sh -c               'b=$(ls /b/rant-bridge-*-linux-x64) && $b --version && { timeout 3 $b --config /tmp/b.yaml 2>&1 || true; } | grep -q listening'
           done
 
   release:

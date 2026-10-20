@@ -48,9 +48,10 @@ static void usage() {
     std::printf("usage: rant-bridge [--config PATH] [--log-file PATH] [--supervise]\n"
                 "       rant-bridge --init-config [--config PATH] [--bind IP] [--port N] [--pass TEXT]\n"
                 "       rant-bridge --version\n"
-                "Lends this host's UDP sockets to Rant nodes elsewhere. The config defaults to %s.\n"
-                "--init-config writes it when missing. --bind and --port set where it listens and\n"
-                "--pass sets the passphrase, empty for none. A running bridge takes them at its next start.\n",
+                "Lends this host's UDP sockets to Rant nodes elsewhere. The config defaults to %s,\n"
+                "written when missing by a start or --init-config. --bind and --port set where it\n"
+                "listens and --pass sets the passphrase, empty for none. A running bridge takes them at\n"
+                "its next start.\n",
                 default_config_path().string().c_str());
 }
 
@@ -263,8 +264,11 @@ int main(int argc, char** argv) {
     if (sup) return supervise(argv[0], child_args);
 
     Config cfg;
-    try { cfg = load_config(config); }
-    catch (const std::exception& e) { std::fprintf(stderr, "rant-bridge: %s\n", e.what()); return 1; }
+    try {
+        /* an installed bridge has no setup step, so the first start writes the defaults */
+        if (write_default_config(config)) std::fprintf(stderr, "wrote a new config with a fresh passphrase at %s\n", config.c_str());
+        cfg = load_config(config);
+    } catch (const std::exception& e) { std::fprintf(stderr, "rant-bridge: %s\n", e.what()); return 1; }
     int rc = serve(cfg, stop_requested, write_state);
     remove_state();
     return rc;

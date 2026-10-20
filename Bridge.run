@@ -1,0 +1,3 @@
+description = "The bridge, with its settings in ~/.rant/bridge.yaml"
+
+node "bridge/bridge" {}

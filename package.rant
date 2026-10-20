@@ -1,0 +1,8 @@
+name        = "bridge"
+description = "Lends this host's UDP sockets to Rant nodes elsewhere, so pages and programs on other networks join its mesh"
+archive     = "rant-bridge-${version}-${platform}.tar.gz"
+
+node "bridge" {
+  run         = "${path.package}/bin/rant-bridge"
+  expect_mesh = false
+}

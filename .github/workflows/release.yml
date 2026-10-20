@@ -1,5 +1,6 @@
 # Builds the bridge on every platform. A pushed tag v<VERSION> also cuts a GitHub Release with
-# the binaries attached. Run by hand it only builds, to check a release would.
+# the binaries attached, and the archives rant install unpacks. Run by hand it only builds, to
+# check a release would.
 name: release
 
 on:
@@ -51,13 +52,18 @@ jobs:
       - name: Unit tests
         run: ctest --preset ${{ matrix.preset }} -R "^unit[.]"
 
+      # the archive holds the package as the repo does: package.rant, the group and bin/
       - name: Stage
         shell: bash
         run: |
-          mkdir -p out
+          mkdir -p out pkg/bin
+          name="rant-bridge-$(cat VERSION)-${{ matrix.name }}"
           ext=""
           if [ -f bin/rant-bridge.exe ]; then ext=".exe"; fi
-          cp "bin/rant-bridge$ext" "out/rant-bridge-$(cat VERSION)-${{ matrix.name }}$ext"
+          cp "bin/rant-bridge$ext" "out/$name$ext"
+          cp "bin/rant-bridge$ext" pkg/bin/
+          cp package.rant Bridge.run pkg/
+          tar -czf "out/$name.tar.gz" -C pkg package.rant Bridge.run bin
 
       - uses: actions/upload-artifact@v7
         with:
@@ -73,6 +79,12 @@ jobs:
         with:
           name: rant-bridge-linux-x64
           path: bin
+
+      - name: The archive holds the package
+        run: |
+          mkdir pkg
+          tar -xzf bin/rant-bridge-*-linux-x64.tar.gz -C pkg
+          test -f pkg/package.rant && test -f pkg/Bridge.run && pkg/bin/rant-bridge --version
 
       - name: The bridge starts everywhere
         run: |

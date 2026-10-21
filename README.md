@@ -1,8 +1,7 @@
 # rant-bridge
 
-A service that lends this host's UDP sockets to Rant nodes elsewhere, pages and programs on
-other networks, so they join this host's mesh. Rant's `spec/tunnel.md` is the protocol, and
-its `TunnelNet` and native client are the clients.
+A service to forward the Rant network to the web or across boundaries where UDP or multicast
+are not an option.
 
 ```
 rant install bridge

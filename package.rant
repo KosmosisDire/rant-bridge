@@ -1,5 +1,5 @@
 name        = "bridge"
-description = "Lends this host's UDP sockets to Rant nodes elsewhere, so pages and programs on other networks join its mesh"
+description = "A service to forward the Rant network to the web or across boundaries where UDP or multicast are not an option."
 archive     = "rant-bridge-${version}-${platform}.tar.gz"
 
 node "bridge" {

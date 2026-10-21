@@ -12,6 +12,6 @@
 namespace bridge {
 
 /* Serves until stop() returns true, which is polled a few times a second. The exit code. */
-int serve(const Config& cfg, const std::function<bool()>& stop, const std::function<void(const std::string& url)>& listening);
+int serve(const Config& cfg, const std::function<bool()>& stop);
 
 }

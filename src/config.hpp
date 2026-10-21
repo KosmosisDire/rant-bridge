@@ -34,7 +34,6 @@ struct Config {
 /* $RANT_HOME, else ~/.rant. */
 std::filesystem::path rant_home();
 std::filesystem::path default_config_path();
-std::filesystem::path state_path();
 
 /* Throws std::runtime_error naming the file and line of the first problem. */
 Config load_config(const std::filesystem::path& path);

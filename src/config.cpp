@@ -25,7 +25,6 @@ fs::path rant_home() {
 }
 
 fs::path default_config_path() { return rant_home() / "bridge.yaml"; }
-fs::path state_path() { return rant_home() / "bridge.state"; }
 
 /* 140 random bits as 28 base32 characters in groups of four, easy to read and type. */
 static std::string new_passphrase() {
@@ -44,7 +43,7 @@ bool write_default_config(const fs::path& path) {
     fs::create_directories(path.parent_path());
     std::ofstream out(path, std::ios::binary);
     if (!out) throw std::runtime_error("cannot write " + path.string());
-    out << "# Rant bridge settings. Apply a change with: rant bridge restart\n"
+    out << "# Rant bridge settings. Apply a change with: rant restart Bridge\n"
            "port: " << kDefaultPort << "\n"
            "bind: 0.0.0.0                 # 0.0.0.0 every interface, 127.0.0.1 this computer only\n"
            "passphrase: " << new_passphrase() << "\n"

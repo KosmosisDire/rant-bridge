@@ -5,7 +5,8 @@ other networks, so they join this host's mesh. Rant's `spec/tunnel.md` is the pr
 its `TunnelNet` and native client are the clients.
 
 ```
-rant bridge enable
+rant install bridge
+rant enable Bridge
 ```
 
 ## Build

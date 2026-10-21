@@ -192,7 +192,7 @@ private:
 
 }
 
-int serve(const Config& cfg, const std::function<bool()>& stop, const std::function<void(const std::string&)>& listening) {
+int serve(const Config& cfg, const std::function<bool()>& stop) {
     ix::initNetSystem();
     rtc::InitLogger(rtc::LogLevel::Warning, [](rtc::LogLevel, std::string m) { std::fprintf(stderr, "[webrtc] %s\n", m.c_str()); });
     rtc::Preload();
@@ -216,7 +216,6 @@ int serve(const Config& cfg, const std::function<bool()>& stop, const std::funct
     std::string host = cfg.bind == "0.0.0.0" ? "127.0.0.1" : cfg.bind;
     std::string url = "ws://" + host + ":" + std::to_string(cfg.port);
     std::fprintf(stderr, "rant-bridge listening on %s\n", url.c_str());
-    if (listening) listening(url);
     while (!stop()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         srv.reap();

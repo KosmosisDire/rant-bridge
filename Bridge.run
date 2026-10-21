@@ -1,3 +1,4 @@
 description = "The bridge, with its settings in ~/.rant/bridge.yaml"
+restart     = "on-failure"
 
 node "bridge/bridge" {}

@@ -1,6 +1,5 @@
 name        = "bridge"
 description = "A service to forward the Rant network to the web or across boundaries where UDP or multicast are not an option."
-archive     = "rant-bridge-${version}-${platform}.tar.gz"
 
 node "bridge" {
   run         = "${path.package}/bin/rant-bridge"

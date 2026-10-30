@@ -134,6 +134,15 @@ jobs:
           path: release
           merge-multiple: true
 
+      - uses: actions/checkout@v7
+        with:
+          path: source
+
+      # the package carries its skill folder, the files at the zip's top
+      - name: Skill
+        working-directory: source/skill
+        run: zip -r "$GITHUB_WORKSPACE/release/bridge-${{ needs.plan.outputs.version }}-skill.zip" .
+
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.plan.outputs.version }}

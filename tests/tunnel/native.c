@@ -1,7 +1,7 @@
 /* Rant's native client on a freshly built bridge: a node on the bridge's sockets and a node of
  * this host on loopback hear each other both ways, again after the bridge restarts, and a
- * wrong passphrase is refused with its reason. native.mjs runs it.
- *   tunnel_native <ws url> <passphrase> <domain> */
+ * port with no bridge is refused with its reason. native.mjs runs it.
+ *   tunnel_native <ws url> <domain> <ws url with no bridge> */
 #define RANT_IMPLEMENTATION
 #include "rant.h"
 #include <stdio.h>
@@ -49,20 +49,20 @@ int main(int argc, char **argv){
     if (argc < 4) return 2;
 
     memset(&o, 0, sizeof o);
-    o.domain = (uint16_t)atoi(argv[3]);
+    o.domain = (uint16_t)atoi(argv[2]);
     o.net.multicast_interface = "127.0.0.1";       /* the bridge's loopback, and this host's */
     o.discovery.announce_interval_us = 300000;
     memset(&reliable, 0, sizeof reliable);
     reliable.qos.reliability = RANT_RELIABLE;
 
     a1 = rant_allocator_heap(0);
-    o.net.bridge = argv[1]; o.net.bridge_passphrase = argv[2];
+    o.net.bridge = argv[1];
     bridged = rant_node_open(&a1, "native-bridged", on_bridged, NULL, &o);
     le = rant_last_error(NULL);
     check(bridged != NULL, "a node opens on the bridge's sockets");
     if (!bridged){ printf("  why: %s\n", le.detail ? le.detail : "?"); return 1; }
     a2 = rant_allocator_heap(0);
-    o.net.bridge = ""; o.net.bridge_passphrase = NULL;
+    o.net.bridge = "";
     local = rant_node_open(&a2, "native-local", on_local, NULL, &o);
     check(local != NULL, "a node of this host opens beside it");
     if (!local) return 1;
@@ -83,9 +83,10 @@ int main(int argc, char **argv){
     rant_node_close(local, 1);
 
     a3 = rant_allocator_heap(0);
-    o.net.bridge = argv[1]; o.net.bridge_passphrase = "not it";
-    check(rant_node_open(&a3, "native-refused", NULL, NULL, &o) == NULL, "a wrong passphrase opens nothing");
+    o.net.bridge = argv[3];
+    check(rant_node_open(&a3, "native-refused", NULL, NULL, &o) == NULL, "a port with no bridge opens nothing");
     le = rant_last_error(NULL);
-    check(le.error == RANT_E_BRIDGE && le.detail && strstr(le.detail, "passphrase"), "and says why");
+    check(le.error == RANT_E_BRIDGE && le.detail && le.detail[0], "and says why");
+    printf("  why: %s\n", le.detail ? le.detail : "?");
     return failed ? 1 : 0;
 }

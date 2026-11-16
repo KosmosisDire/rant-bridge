@@ -107,4 +107,11 @@ void Waker::drain() {
     while (fd_ != kBadSock && ::recv(fd_, c, sizeof c, 0) > 0) {}
 }
 
+std::string host_name() {
+    char b[256] = {};
+    if (gethostname(b, sizeof b - 1) != 0 || !b[0]) return "rant";
+    std::string s(b);
+    return s.substr(0, s.find('.'));    /* the host, not its domain */
+}
+
 }

@@ -1,6 +1,6 @@
 // The tunnel against a freshly built bridge, through Rant's own client TunnelNet: lent
-// sockets, batched datagrams both ways, a group, and a lost session bound again. Everything
-// stays on loopback.   node tests/tunnel/test.mjs <rant-bridge exe> <Rant web package dir>
+// sockets, batched datagrams both ways, a group, a lost session bound again, and which pages
+// may open. Everything stays on loopback.   node tests/tunnel/test.mjs <rant-bridge exe> <Rant web package dir>
 
 import { spawn } from "node:child_process";
 import dgram from "node:dgram";
@@ -17,7 +17,7 @@ const PORT = 17480 + (process.pid % 200);
 const GROUP_PORT = 17700 + (process.pid % 200);
 const lo = naddr("127.0.0.1");
 const cfg = join(mkdtempSync(join(tmpdir(), "tunnel-test-")), "bridge.yaml");
-writeFileSync(cfg, `port: ${PORT}\nbind: 127.0.0.1\npassphrase: tunnel-test\nwebrtc: false\ngrace_ms: 10000\n`);
+writeFileSync(cfg, `port: ${PORT}\nbind: 127.0.0.1\nwebrtc: false\ngrace_ms: 10000\n`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (f, ms) => { for (const end = Date.now() + ms; !f() && Date.now() < end;) await sleep(10); return f(); };
@@ -38,7 +38,7 @@ try {
     const events = [];
     for (let tries = 0; !net && tries < 50; tries++) {
         try {
-            net = await TunnelNet.connect(`ws://127.0.0.1:${PORT}`, { passphrase: "tunnel-test", name: "tunnel-test",
+            net = await TunnelNet.connect(`ws://127.0.0.1:${PORT}`, { name: "tunnel-test",
                 transport: "websocket", address: "127.0.0.1", onEvent: (e) => events.push(e) });
         } catch { await sleep(100); }
     }
@@ -104,15 +104,28 @@ try {
     await until(() => got.length > 0, 3000);
     check(got.some((x) => x.id === a && x.text === "again"), "the lent port reaches the client again");
 
-    /* the passphrase itself opens nothing: an open must prove a fresh nonce */
-    const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
-    const answer = await new Promise((resolve, reject) => {
+    /* each request on a fresh socket, as a page with this origin sends it, with the replies and the close code */
+    const ask = (origin, requests) => new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${PORT}`, origin ? { headers: { Origin: origin } } : undefined);
+        const replies = [];
         ws.onerror = () => reject(new Error("cannot reach the bridge"));
-        ws.onopen = () => ws.send(JSON.stringify({ op: "open", seq: 1, proto: 15, passphrase: "tunnel-test" }));
-        ws.onmessage = (m) => resolve(JSON.parse(String(m.data)));
+        ws.onopen = () => { for (const r of requests) ws.send(JSON.stringify(r)); };
+        /* the bridge's own close comes right behind a refusal, so wait for it before closing */
+        ws.onmessage = (m) => { if (typeof m.data !== "string") return; replies.push(JSON.parse(m.data)); if (replies.length === requests.length) setTimeout(() => ws.close(), 500); };
+        ws.onclose = (e) => resolve({ replies, code: e.code });
     });
-    ws.close();
-    check(answer.ok === false && /challenge/.test(answer.error), `an open with no proof is refused (${answer.error})`);
+    const open = { op: "open", seq: 2, proto: 16, name: "origin-test" };
+    let o = await ask("", [{ ...open, proto: 15 }]);
+    check(o.replies[0]?.ok === false && /protocol 16/.test(o.replies[0]?.error) && o.code === 4001,
+          `an open on another protocol is refused (${o.replies[0]?.error})`);
+    o = await ask("https://evil.example", [{ op: "bridges", seq: 1 }, open]);
+    check(o.replies[0]?.ok === true && Array.isArray(o.replies[0]?.bridges), "a page not allowed still lists the bridges");
+    check(o.replies[1]?.ok === false && /https:\/\/evil\.example: add it to allowed_origins in .*bridge\.yaml/.test(o.replies[1]?.error)
+          && o.code === 4003, `and its open is refused with what to add (${o.replies[1]?.error})`);
+    o = await ask("http://localhost:5173", [open]);
+    check(o.replies[0]?.ok === true, "a page on this computer opens a session");
+    o = await ask("https://explore.rantlib.dev", [open]);
+    check(o.replies[0]?.ok === true, "so does the explorer's site");
 } catch (e) {
     console.log(`FAIL ${e?.message ?? e}`);
     failed++;

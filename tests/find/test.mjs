@@ -19,7 +19,7 @@ const check = (ok, what) => { console.log(`${ok ? "ok  " : "FAIL"} ${what}`); if
 /* each a home of its own, or a bridge writes its state over that of the user's bridge */
 const bridges = ports.map((port) => {
     const dir = mkdtempSync(join(tmpdir(), "find-test-"));
-    writeFileSync(join(dir, "bridge.yaml"), `port: ${port}\nbind: 127.0.0.1\npassphrase: find-test\nwebrtc: false\nadvertise: true\n`);
+    writeFileSync(join(dir, "bridge.yaml"), `port: ${port}\nbind: 127.0.0.1\nwebrtc: false\nadvertise: true\n`);
     return spawn(exe, ["--config", join(dir, "bridge.yaml")], { env: { ...process.env, RANT_HOME: dir }, stdio: ["ignore", "ignore", "inherit"] });
 });
 

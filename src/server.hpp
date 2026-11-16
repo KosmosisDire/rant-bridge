@@ -1,6 +1,6 @@
 #pragma once
 
-/* The WebSocket server: checks the Origin and the passphrase, gives each client a tunnel
+/* The WebSocket server: checks the Origin, gives each client a tunnel
  * session, hands a returning client its session back, and ends sessions whose grace ran out. */
 
 #include "config.hpp"

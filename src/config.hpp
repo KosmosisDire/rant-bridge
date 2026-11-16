@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include "origin.hpp"
+
 namespace bridge {
 
 struct IceServer {
@@ -18,8 +20,7 @@ constexpr uint16_t kDefaultPort = 6731;     /* Rant's ports are 6730 to 6739 */
 struct Config {
     uint16_t                 port = kDefaultPort;
     std::string              bind = "0.0.0.0";
-    std::string              passphrase;            /* empty = no passphrase asked */
-    std::vector<std::string> allowed_origins;       /* empty = any origin */
+    std::vector<std::string> allowed_origins = default_origins();   /* the pages that may open a session */
     std::vector<IceServer>   ice;
     bool                     webrtc = true;
     bool                     advertise = true;      /* answer rant-bridges.local and list the bridges, over mDNS */
@@ -29,6 +30,7 @@ struct Config {
     uint32_t                 detach_ms = 3000;
     uint32_t                 max_connections = 32;
     uint64_t                 max_message_bytes = 1ull << 20;  /* the largest message a client may send */
+    std::filesystem::path    path;                  /* the file it was read from */
 };
 
 /* $RANT_HOME, else ~/.rant. */
@@ -38,7 +40,7 @@ std::filesystem::path default_config_path();
 /* Throws std::runtime_error naming the file and line of the first problem. */
 Config load_config(const std::filesystem::path& path);
 
-/* Writes the commented default config with a fresh passphrase. false when it already exists. */
+/* Writes the commented default config. false when it already exists. */
 bool write_default_config(const std::filesystem::path& path);
 
 /* Sets top level settings, writing the default config first when there is none. A key's line

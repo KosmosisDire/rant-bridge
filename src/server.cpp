@@ -1,7 +1,7 @@
 #include "server.hpp"
 
-#include "auth.hpp"
 #include "mdns.hpp"
+#include "net.hpp"
 #include "session.hpp"
 
 #include <ixwebsocket/IXNetSystem.h>
@@ -28,7 +28,7 @@ namespace {
 struct Conn {
     ix::WebSocket* ws = nullptr;
     std::shared_ptr<Session> session;
-    std::string nonce;      /* the challenge the next open answers, used once */
+    std::string refused_origin;     /* a page not allowed: it may list the bridges, never open */
 };
 
 std::string new_token() {
@@ -47,15 +47,12 @@ public:
         const std::string id = state->getId();
         switch (msg->type) {
         case ix::WebSocketMessageType::Open: {
-            auto o = msg->openInfo.headers.find("Origin");
-            if (o != msg->openInfo.headers.end() && !cfg_.allowed_origins.empty()) {
-                bool allowed = false;
-                for (const auto& a : cfg_.allowed_origins) if (a == o->second) allowed = true;
-                if (!allowed) { ws.close(4003, "origin not allowed"); return; }
-            }
-            std::lock_guard<std::mutex> g(mu_);
             auto c = std::make_shared<Conn>();
             c->ws = &ws;
+            auto o = msg->openInfo.headers.find("Origin");
+            if (o != msg->openInfo.headers.end() && !origin_allowed(cfg_.allowed_origins, o->second))
+                c->refused_origin = o->second.empty() ? "null" : o->second;
+            std::lock_guard<std::mutex> g(mu_);
             conns_[id] = c;
             return;
         }
@@ -70,13 +67,8 @@ public:
                 ws.send(json({ {"op", "reply"}, {"seq", 0}, {"ok", false}, {"error", "malformed JSON"} }).dump());
                 return;
             }
-            /* the bridges here are no secret, mDNS tells anyone on the network, so no passphrase */
+            /* the bridges here are no secret, mDNS tells anyone on the network, so any page may ask */
             if (req.value("op", "") == "bridges") { ws.send(bridges(req).dump()); return; }
-            if (req.value("op", "") == "challenge") {
-                c->nonce = new_nonce();
-                ws.send(json({ {"op", "reply"}, {"seq", req.value("seq", json(0))}, {"ok", true}, {"nonce", c->nonce} }).dump());
-                return;
-            }
             if (c->session) {
                 if (req.value("op", "") == "open") ws.send(json({ {"op", "reply"}, {"seq", req.value("seq", json(0))}, {"ok", false}, {"error", "already open"} }).dump());
                 else c->session->on_text(req);
@@ -143,13 +135,11 @@ private:
             refuse("this bridge speaks protocol " + std::to_string(kProtocol) + ", the client " + std::to_string(req.value("proto", 0)), true);
             return;
         }
-        std::string nonce = std::move(c.nonce);
-        c.nonce.clear();
-        if (!cfg_.passphrase.empty()
-            && (nonce.empty() || !same_secret(req.value("proof", std::string()), passphrase_proof(cfg_.passphrase, nonce)))) {
-            /* a slow refusal, not a lockout: behind a tunnel every client shares one address */
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            refuse(nonce.empty() ? "ask for a challenge before open" : "wrong passphrase", true);
+        if (!c.refused_origin.empty()) {
+            c.ws->send(json({ {"op", "reply"}, {"seq", seq}, {"ok", false},
+                              {"error", "this bridge takes no pages from " + c.refused_origin + ": add it to allowed_origins in "
+                                        + cfg_.path.string() + " on " + host_name() + ", then rant restart Bridge"} }).dump());
+            c.ws->close(4003, "origin not allowed");
             return;
         }
 

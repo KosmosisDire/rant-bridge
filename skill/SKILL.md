@@ -16,16 +16,18 @@ the package `bridge`, and its group `Bridge` runs it like any group, no admin ne
 | at every boot | `rant enable Bridge`, `rant disable Bridge` |
 | output | `rant log Bridge`, `-f` to follow |
 
-- Its config is `~/.rant/bridge.yaml`, written at its first start with a random passphrase.
-  It listens on every interface on 6731 unless the config says otherwise. Edit it by hand,
-  then run `rant restart Bridge`.
+- Its config is `~/.rant/bridge.yaml`, written at its first start. It listens on every
+  interface on 6731 unless the config says otherwise. Edit it by hand, then run
+  `rant restart Bridge`.
 - Bridges find each other over mDNS: each answers `rant-bridges.local` and lists the others,
-  which `findBridges()` from `rant-middleware/tunnel` reads with no passphrase. `advertise:
-  false` in the config turns it off.
-- Security: the passphrase never crosses the wire, a client proves it on a fresh nonce.
-  Anyone who can load a frontend that connects to the bridge has the bridge's access to the
-  mesh. Restrict who can reach the frontend (Cloudflare Access or similar) and
-  set `allowed_origins` in the config.
+  which `findBridges()` from `rant-middleware/tunnel` reads from any page. `advertise: false`
+  in the config turns it off.
+- Security: the bridge asks no secret, since a program that reaches its port is on the
+  network already. A page opens a session only when `allowed_origins` lists its origin:
+  `local` (pages on this computer and the LAN) and `https://explore.rantlib.dev` by default,
+  `"*"` for any. Another page's connect fails with a message naming the origin to add.
+  Anyone who can load an allowed frontend has the bridge's access to the mesh, so restrict
+  who reaches it (Cloudflare Access or similar).
 
 ## Connecting through it
 
@@ -37,15 +39,14 @@ the package `bridge`, and its group `Bridge` runs it like any group, no admin ne
 ```ts
 import { openNode, types } from "rant-middleware";
 import { TunnelNet } from "rant-middleware/tunnel";
-const net = await TunnelNet.connect("ws://192.168.1.20:6731", { passphrase });
+const net = await TunnelNet.connect("ws://192.168.1.20:6731");
 const node = await openNode("page", { net });
 node.subscriber("Pose", types.Pose2D, (p) => draw(p));
 ```
 
 - A node in any other binding runs on a bridge's sockets with the bridge option (`net.bridge`
-  in C, `bridge` in C++, Python and Rust, `Bridge` in C#, Bridge Url on the Unity component)
-  and its passphrase, or with `RANT_BRIDGE` and `RANT_BRIDGE_PASSPHRASE` in its environment
-  when the code sets none. `ws://` only. An unreachable bridge or a wrong passphrase fails
-  the open with the `bridge` error and its reason.
+  in C, `bridge` in C++, Python and Rust, `Bridge` in C#, Bridge Url on the Unity component),
+  or with `RANT_BRIDGE` in its environment when the code sets none. `ws://` only. An
+  unreachable bridge fails the open with the `bridge` error and its reason.
 - A machine with no multicast, or behind a NAT (a container, a cloud host), joins a mesh this
   way, through a bridge on that mesh's network.

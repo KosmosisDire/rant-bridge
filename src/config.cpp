@@ -6,7 +6,6 @@
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
-#include <random>
 #include <stdexcept>
 #include <system_error>
 
@@ -26,18 +25,6 @@ fs::path rant_home() {
 
 fs::path default_config_path() { return rant_home() / "bridge.yaml"; }
 
-/* 140 random bits as 28 base32 characters in groups of four, easy to read and type. */
-static std::string new_passphrase() {
-    static const char alphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    std::random_device rd;
-    std::string out;
-    for (int i = 0; i < 28; i++) {
-        if (i && i % 4 == 0) out += '-';
-        out += alphabet[rd() % 32];
-    }
-    return out;
-}
-
 bool write_default_config(const fs::path& path) {
     if (fs::exists(path)) return false;
     fs::create_directories(path.parent_path());
@@ -46,8 +33,8 @@ bool write_default_config(const fs::path& path) {
     out << "# Rant bridge settings. Apply a change with: rant restart Bridge\n"
            "port: " << kDefaultPort << "\n"
            "bind: 0.0.0.0                 # 0.0.0.0 every interface, 127.0.0.1 this computer only\n"
-           "passphrase: " << new_passphrase() << "\n"
-           "allowed_origins: []           # browser origins allowed to connect, empty = any\n"
+           "allowed_origins: [local, https://explore.rantlib.dev]   # pages that may open a session:\n"
+           "                              # local is this computer and the LAN, \"*\" any page\n"
            "ice:\n"
            "  - urls: stun:stun.l.google.com:19302\n"
            "  - urls: stun:stun.cloudflare.com:3478\n"
@@ -64,7 +51,7 @@ bool write_default_config(const fs::path& path) {
            "max_message_bytes: 1048576       # the largest message a client may send\n";
     out.close();
 #ifndef _WIN32
-    /* the passphrase is a secret. On Windows the profile folder is already private */
+    /* a TURN credential is a secret. On Windows the profile folder is already private */
     fs::permissions(path, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace);
 #endif
     return true;
@@ -145,6 +132,7 @@ template <class T> static T scalar(const fs::path& path, const std::string& key,
 
 Config load_config(const fs::path& path) {
     Config c;
+    c.path = path;
     YAML::Node root;
     try { root = YAML::LoadFile(path.string()); }
     catch (const YAML::BadFile&) { throw std::runtime_error("no config at " + path.string() + ", run rant-bridge --init-config"); }
@@ -157,9 +145,10 @@ Config load_config(const fs::path& path) {
         const YAML::Node& v = kv.second;
         if (key == "port") c.port = scalar<uint16_t>(path, key, v);
         else if (key == "bind") c.bind = scalar<std::string>(path, key, v);
-        else if (key == "passphrase") c.passphrase = v.IsNull() ? "" : scalar<std::string>(path, key, v);
         else if (key == "allowed_origins") {
             if (!v.IsNull() && !v.IsSequence()) fail(path, v, "'allowed_origins' must be a list");
+            /* an empty list takes the default, as a missing one does */
+            if (v.IsSequence() && v.size()) c.allowed_origins.clear();
             for (const auto& o : v) c.allowed_origins.push_back(scalar<std::string>(path, key, o));
         }
         else if (key == "ice") {
@@ -196,9 +185,9 @@ Config load_config(const fs::path& path) {
         else if (key == "detach_ms") c.detach_ms = scalar<uint32_t>(path, key, v);
         else if (key == "max_connections") c.max_connections = scalar<uint32_t>(path, key, v);
         else if (key == "max_message_bytes") c.max_message_bytes = scalar<uint64_t>(path, key, v);
-        /* a setting of the per client nodes, gone with them: a config written before still loads */
-        else if (key == "queue_delay_warn_ms")
-            std::fprintf(stderr, "rant-bridge: %s: 'queue_delay_warn_ms' is no longer used, remove it\n", path.filename().string().c_str());
+        /* settings the bridge dropped: a config written before still loads */
+        else if (key == "queue_delay_warn_ms" || key == "passphrase")
+            std::fprintf(stderr, "rant-bridge: %s: '%s' is no longer used, remove it\n", path.filename().string().c_str(), key.c_str());
         else fail(path, kv.first, "unknown setting '" + key + "'");
     }
     return c;

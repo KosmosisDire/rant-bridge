@@ -15,7 +15,7 @@ const { TunnelNet } = await import(pathToFileURL(join(rantWeb, "bindings/web/dis
 const { default: createBench } = await import(pathToFileURL(join(rantWeb, "bin/web/rant_web_bench.mjs")).href);
 
 const [url, ...args] = process.argv.slice(2);
-const net = await TunnelNet.connect(url, { passphrase: process.env.PASS ?? "bench", name: "bench-node-tunnel", transport: "websocket" });
+const net = await TunnelNet.connect(url, { name: "bench-node-tunnel", transport: "websocket" });
 let done;
 const finished = new Promise((r) => { done = r; });
 await createBench({

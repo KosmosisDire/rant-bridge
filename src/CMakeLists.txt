@@ -1,17 +1,17 @@
 # Everything but main() is one static library, so the unit tests link the same code.
 
 add_library(rant_bridge_core STATIC
-  auth.cpp
   config.cpp
   mdns.cpp
   net.cpp
+  origin.cpp
   rtc.cpp
   server.cpp
   session.cpp
   tunnel.cpp)
 target_include_directories(rant_bridge_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(rant_bridge_core PUBLIC ixwebsocket::ixwebsocket nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp
-                      LibDataChannel::LibDataChannelStatic mbedcrypto)
+                      LibDataChannel::LibDataChannelStatic)
 target_compile_definitions(rant_bridge_core PUBLIC RANT_BRIDGE_VERSION="${PROJECT_VERSION}")
 if(WIN32)
   target_link_libraries(rant_bridge_core PUBLIC iphlpapi)     # net.cpp lists this host's interfaces

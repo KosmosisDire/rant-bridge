@@ -43,6 +43,9 @@ struct Iface { uint32_t addr, mask; };
 /* Loopback left out. */
 std::vector<Iface> local_interfaces();
 
+/* This host's name without its domain, "rant" when it has none. */
+std::string host_name();
+
 /* A loopback socket connected to itself: a send to it ends a poll early. */
 class Waker {
 public:

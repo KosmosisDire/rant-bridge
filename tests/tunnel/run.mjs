@@ -89,7 +89,7 @@ function startBridge() {
     const config = join(dir, "bridge.yaml");
     /* sessions outlive the run: reaping a WebRTC session after its grace crashes the bridge
        (a bug of the released bridges too), which would end the matrix */
-    writeFileSync(config, `port: ${BRIDGE}\nbind: 127.0.0.1\npassphrase: bench\nwebrtc: true\ngrace_ms: ${process.env.GRACE_MS ?? 3600000}\n` +
+    writeFileSync(config, `port: ${BRIDGE}\nbind: 127.0.0.1\nwebrtc: true\ngrace_ms: ${process.env.GRACE_MS ?? 3600000}\n` +
                           (process.env.BRIDGE_MTU ? `mtu: ${process.env.BRIDGE_MTU}\n` : ""));
     /* a home of its own, or the bridge writes its state over that of the user's bridge */
     const p = start(bridgeExe, ["--config", config], "bridge", { RANT_HOME: dir });
@@ -164,7 +164,7 @@ function printProfile(p) {
 
 async function page(transport, args, rate) {
     const url = `http://127.0.0.1:${HTTP}/bench.html?transport=${transport}&bridge=ws://${HOST}:${BRIDGE}` +
-                `&pass=bench&args=${args.join(",")}`;
+                `&args=${args.join(",")}`;
     const c = await Cdp.open("about:blank");
     await c.send("Performance.enable");
     if (process.env.VERBOSE) await c.send("Runtime.enable");

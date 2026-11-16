@@ -201,13 +201,6 @@ static std::string dotted(uint32_t naddr) {
     return std::to_string(b[0]) + "." + std::to_string(b[1]) + "." + std::to_string(b[2]) + "." + std::to_string(b[3]);
 }
 
-static std::string host_name() {
-    char b[256] = {};
-    if (gethostname(b, sizeof b - 1) != 0 || !b[0]) return "rant";
-    std::string s(b);
-    return s.substr(0, s.find('.'));    /* the host, not its domain */
-}
-
 /* A DNS label: letters, digits and hyphens, at most 63. */
 static std::string label(const std::string& s) {
     std::string out;

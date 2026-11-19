@@ -28,6 +28,11 @@ bool same_name(const std::string& a, const std::string& b) {
     return true;
 }
 
+bool is_bridge(const std::string& name) {
+    const size_t n = std::strlen(kService);
+    return name.size() > n + 1 && name[name.size() - n - 1] == '.' && same_name(name.substr(name.size() - n), kService);
+}
+
 namespace {
 
 struct Reader {
@@ -369,13 +374,13 @@ void Finder::on_response(const mdns::Message& r, uint32_t from_ip) {
                 Peer& p = peers_[rec.target];
                 p.seen = now;
                 p.from = from_ip;
-            } else if (rec.type == mdns::SRV && !mdns::same_name(rec.name, instance_)) {
+            } else if (rec.type == mdns::SRV && mdns::is_bridge(rec.name) && !mdns::same_name(rec.name, instance_)) {
                 Peer& p = peers_[rec.name];
                 p.target = rec.target;
                 p.port = rec.port;
                 p.seen = now;
                 p.from = from_ip;
-            } else if (rec.type == mdns::TXT && !mdns::same_name(rec.name, instance_)) {
+            } else if (rec.type == mdns::TXT && mdns::is_bridge(rec.name) && !mdns::same_name(rec.name, instance_)) {
                 Peer& p = peers_[rec.name];
                 for (const auto& kv : rec.txt) {
                     if (kv.rfind("v=", 0) == 0) p.version = kv.substr(2);

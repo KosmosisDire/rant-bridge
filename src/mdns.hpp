@@ -55,6 +55,8 @@ bool parse(const uint8_t* p, size_t n, Message& out);
 std::string build(const Message& m);
 /* DNS names match without case. */
 bool same_name(const std::string& a, const std::string& b);
+/* A bridge's instance name, "<host>._rant-bridge._tcp.local", and no other service's. */
+bool is_bridge(const std::string& name);
 
 }
 

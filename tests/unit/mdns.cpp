@@ -51,5 +51,9 @@ int main() {
     CHECK(!mdns::parse((const uint8_t*)rb.data(), rb.size() - 3, r2));
 
     CHECK(mdns::same_name("Rant-Bridges.LOCAL", mdns::kSharedName));
+    /* a printer's or another program's service is never taken for a bridge */
+    CHECK(mdns::is_bridge("karbon._rant-bridge._tcp.local") && mdns::is_bridge("PC (6800)._Rant-Bridge._tcp.local"));
+    CHECK(!mdns::is_bridge("HTTP._http._tcp.local") && !mdns::is_bridge("_rant-bridge._tcp.local") &&
+          !mdns::is_bridge("x_rant-bridge._tcp.local"));
     return finish();
 }

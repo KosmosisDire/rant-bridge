@@ -1,6 +1,6 @@
 # The Rant bridge: lends this host's UDP sockets to Rant nodes in pages, over WebSocket and
 # WebRTC. CPM fetches IXWebSocket, nlohmann json, yaml-cpp, MbedTLS and libdatachannel, and Rant
-# for its build helpers and for the client the tests run.
+# for its census watch, its build helpers and the client the tests run.
 
 cmake_minimum_required(VERSION 3.21)
 

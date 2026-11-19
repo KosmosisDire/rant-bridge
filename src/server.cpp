@@ -7,6 +7,7 @@
 #include <ixwebsocket/IXNetSystem.h>
 #include <ixwebsocket/IXWebSocketServer.h>
 #include <nlohmann/json.hpp>
+#include <rant.hpp>
 #include <rtc/rtc.hpp>
 
 #include <chrono>
@@ -41,7 +42,21 @@ std::string new_token() {
 
 class Server {
 public:
-    Server(const Config& cfg, Finder* finder) : cfg_(cfg), finder_(finder) {}
+    Server(const Config& cfg, Finder* finder) : cfg_(cfg), finder_(finder) {
+        /* the domains this host's network has, which the bridges list carries */
+        rant::DomainsOptions o;
+        if (cfg.bind != "0.0.0.0") o.multicast_interface = cfg.bind;
+        try { domains_ = std::make_unique<rant::Domains>(o); }
+        catch (const rant::Error& e) { std::fprintf(stderr, "rant-bridge: no census, so it lists no domains: %s\n", e.what()); }
+    }
+
+    /* The census watch reads what arrived, so this runs more often than nodes announce. */
+    void watch_domains() {
+        if (!domains_) return;
+        std::vector<rant::DomainInfo> heard = domains_->list();
+        std::lock_guard<std::mutex> g(mu_);
+        heard_ = std::move(heard);
+    }
 
     void on_message(const std::shared_ptr<ix::ConnectionState>& state, ix::WebSocket& ws, const ix::WebSocketMessagePtr& msg) {
         const std::string id = state->getId();
@@ -118,11 +133,19 @@ private:
         json list = json::array();
         uint32_t ip = 0;
         inet_pton(AF_INET, asker.c_str(), &ip);
+        json domains = json::array();
+        {
+            std::lock_guard<std::mutex> g(mu_);
+            for (const rant::DomainInfo& d : heard_) domains.push_back({ {"domain", d.domain}, {"nodes", d.nodes} });
+        }
         if (finder_)
-            for (const FoundBridge& b : finder_->bridges(ip))
+            for (const FoundBridge& b : finder_->bridges(ip)) {
                 list.push_back({ {"name", b.name}, {"url", "ws://" + b.address + ":" + std::to_string(b.port)},
                                  {"version", b.version}, {"self", b.self} });
-        else list.push_back({ {"name", "this bridge"}, {"url", ""}, {"version", RANT_BRIDGE_VERSION}, {"self", true} });
+                if (b.self) list.back()["domains"] = domains;
+            }
+        else list.push_back({ {"name", host_name()}, {"url", ""}, {"version", RANT_BRIDGE_VERSION}, {"self", true},
+                              {"domains", domains} });
         return { {"op", "reply"}, {"seq", req.value("seq", json(0))}, {"ok", true}, {"bridges", list} };
     }
 
@@ -177,9 +200,11 @@ private:
 
     const Config& cfg_;
     Finder* finder_;
-    std::mutex mu_;
+    std::unique_ptr<rant::Domains> domains_;    /* walked by the serve loop alone */
+    mutable std::mutex mu_;
     std::map<std::string, std::shared_ptr<Conn>> conns_;
     std::map<std::string, std::shared_ptr<Session>> sessions_;   /* by resume token */
+    std::vector<rant::DomainInfo> heard_;
 };
 
 }
@@ -211,6 +236,7 @@ int serve(const Config& cfg, const std::function<bool()>& stop) {
     while (!stop()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         srv.reap();
+        srv.watch_domains();
     }
     ws.stop();
     srv.close_all();

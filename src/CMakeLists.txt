@@ -8,10 +8,11 @@ add_library(rant_bridge_core STATIC
   rtc.cpp
   server.cpp
   session.cpp
-  tunnel.cpp)
+  tunnel.cpp
+  "${rant_SOURCE_DIR}/dist/rant.cpp")    # the one RANT_IMPLEMENTATION anchor, for the census watch
 target_include_directories(rant_bridge_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(rant_bridge_core PUBLIC ixwebsocket::ixwebsocket nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp
-                      LibDataChannel::LibDataChannelStatic)
+                      LibDataChannel::LibDataChannelStatic rant::rant rant::rant_platform)
 target_compile_definitions(rant_bridge_core PUBLIC RANT_BRIDGE_VERSION="${PROJECT_VERSION}")
 if(WIN32)
   target_link_libraries(rant_bridge_core PUBLIC iphlpapi)     # net.cpp lists this host's interfaces

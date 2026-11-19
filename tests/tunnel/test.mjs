@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const [exe, pkg] = process.argv.slice(2);
-const { TunnelNet } = await import(pathToFileURL(join(pkg, "dist/tunnel.js")).href);
+const { TunnelNet, findBridges } = await import(pathToFileURL(join(pkg, "dist/tunnel.js")).href);
 const { naddr } = await import(pathToFileURL(join(pkg, "dist/net.js")).href);
 
 const PORT = 17480 + (process.pid % 200);
@@ -20,7 +20,10 @@ const cfg = join(mkdtempSync(join(tmpdir(), "tunnel-test-")), "bridge.yaml");
 writeFileSync(cfg, `port: ${PORT}\nbind: 127.0.0.1\nwebrtc: false\ngrace_ms: 10000\n`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const until = async (f, ms) => { for (const end = Date.now() + ms; !f() && Date.now() < end;) await sleep(10); return f(); };
+const until = async (f, ms, step) => {
+    for (const end = Date.now() + ms; !f() && Date.now() < end;) await (step ? Promise.all([step(), sleep(100)]) : sleep(10));
+    return f();
+};
 let failed = 0;
 const check = (ok, what) => { console.log(`${ok ? "ok  " : "FAIL"} ${what}`); if (!ok) failed++; };
 
@@ -91,6 +94,12 @@ try {
     check(seen[0]?.value === 1.5 && seen[0]?.where === "host", "a node through the tunnel hears a node on this host");
     const r = await twice.call({ value: 4, where: "" });
     check(r.ok && r.value?.value === 8, "a node on this host calls a function a node through the tunnel answers");
+    let listed;
+    await until(() => listed?.nodes === 2, 3000, async () => {
+        const own = (await findBridges(`ws://127.0.0.1:${PORT}`)).find((b) => b.self);
+        listed = own?.domains?.find((d) => d.domain === domain);
+    });
+    check(listed?.nodes === 2, `the bridge lists the domain of both nodes from the census (${JSON.stringify(listed)})`);
     page.close();
     host.close();
 

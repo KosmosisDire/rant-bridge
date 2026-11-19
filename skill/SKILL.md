@@ -20,7 +20,9 @@ the package `bridge`, and its group `Bridge` runs it like any group, no admin ne
   interface on 6731 unless the config says otherwise. Edit it by hand, then run
   `rant restart Bridge`.
 - Bridges find each other over mDNS: each answers `rant-bridges.local` and lists the others,
-  which `findBridges()` from `rant-middleware/tunnel` reads from any page. `advertise: false`
+  which `findBridges()` from `rant-middleware/tunnel` reads from any page. Each bridge also
+  lists the domains its network has, from Rant's census, so a page picks a bridge and a
+  domain before it connects. `advertise: false`
   in the config turns it off.
 - Security: the bridge asks no secret, since a program that reaches its port is on the
   network already. A page opens a session only when `allowed_origins` lists its origin:

@@ -55,6 +55,8 @@ try {
         if (found.some((b) => b.url === `ws://127.0.0.1:${ports[1]}`)) break;
     }
     check(found.filter((b) => b.self).length === 1 && found.some((b) => b.self && b.url === `ws://127.0.0.1:${ports[0]}`), "a bridge lists itself once");
+    check(Array.isArray(found.find((b) => b.self)?.domains) && found.every((b) => b.self || b.domains === undefined),
+          "only its own entry carries the domains its network has");
     check(found.some((b) => !b.self && b.url === `ws://127.0.0.1:${ports[1]}`), "a bridge lists the other bridge on its network");
     const other = await list(ports[1]);
     check(other.some((b) => !b.self && b.url === `ws://127.0.0.1:${ports[0]}`), "and the other lists it back");
@@ -64,6 +66,7 @@ try {
         const { findBridges } = await import(pathToFileURL(join(pkg, "dist/tunnel.js")).href);
         const seen = await findBridges(`ws://127.0.0.1:${ports[1]}`);
         check(seen.length === found.length, "Rant's findBridges reads the same list");
+        check(seen.every((b) => Array.isArray(b.domains)), "and asks the other bridge for its domains");
     }
 } catch (e) {
     console.log(`FAIL ${e?.message ?? e}`);

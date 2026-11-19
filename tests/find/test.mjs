@@ -54,7 +54,7 @@ try {
         try { found = await list(ports[0]); } catch { continue; }
         if (found.some((b) => b.url === `ws://127.0.0.1:${ports[1]}`)) break;
     }
-    check(found.some((b) => b.self && b.url === `ws://127.0.0.1:${ports[0]}`), "a bridge lists itself");
+    check(found.filter((b) => b.self).length === 1 && found.some((b) => b.self && b.url === `ws://127.0.0.1:${ports[0]}`), "a bridge lists itself once");
     check(found.some((b) => !b.self && b.url === `ws://127.0.0.1:${ports[1]}`), "a bridge lists the other bridge on its network");
     const other = await list(ports[1]);
     check(other.some((b) => !b.self && b.url === `ws://127.0.0.1:${ports[0]}`), "and the other lists it back");

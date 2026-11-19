@@ -76,7 +76,8 @@ public:
     Finder(const Finder&) = delete;
     Finder& operator=(const Finder&) = delete;
 
-    std::vector<FoundBridge> bridges();
+    /* This bridge once, at its address on the asker's network, then the others. */
+    std::vector<FoundBridge> bridges(uint32_t asker);
 
 private:
     struct Peer {

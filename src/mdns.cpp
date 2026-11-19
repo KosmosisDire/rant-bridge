@@ -388,10 +388,10 @@ void Finder::on_response(const mdns::Message& r, uint32_t from_ip) {
     }
 }
 
-std::vector<FoundBridge> Finder::bridges() {
+std::vector<FoundBridge> Finder::bridges(uint32_t asker) {
     std::vector<FoundBridge> out;
-    for (const Iface& f : ifaces_) out.push_back({ host_name_, dotted(f.addr), port_, version_, true });
-    if (ifaces_.empty()) out.push_back({ host_name_, "127.0.0.1", port_, version_, true });
+    uint32_t own = local_for(asker);
+    out.push_back({ host_name_, own ? dotted(own) : "127.0.0.1", port_, version_, true });
     auto now = clock_type::now();
     std::lock_guard<std::mutex> g(mu_);
     for (auto it = peers_.begin(); it != peers_.end();) {

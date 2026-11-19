@@ -68,7 +68,7 @@ public:
                 return;
             }
             /* the bridges here are no secret, mDNS tells anyone on the network, so any page may ask */
-            if (req.value("op", "") == "bridges") { ws.send(bridges(req).dump()); return; }
+            if (req.value("op", "") == "bridges") { ws.send(bridges(req, state->getRemoteIp()).dump()); return; }
             if (c->session) {
                 if (req.value("op", "") == "open") ws.send(json({ {"op", "reply"}, {"seq", req.value("seq", json(0))}, {"ok", false}, {"error", "already open"} }).dump());
                 else c->session->on_text(req);
@@ -114,10 +114,12 @@ public:
     }
 
 private:
-    json bridges(const json& req) const {
+    json bridges(const json& req, const std::string& asker) const {
         json list = json::array();
+        uint32_t ip = 0;
+        inet_pton(AF_INET, asker.c_str(), &ip);
         if (finder_)
-            for (const FoundBridge& b : finder_->bridges())
+            for (const FoundBridge& b : finder_->bridges(ip))
                 list.push_back({ {"name", b.name}, {"url", "ws://" + b.address + ":" + std::to_string(b.port)},
                                  {"version", b.version}, {"self", b.self} });
         else list.push_back({ {"name", "this bridge"}, {"url", ""}, {"version", RANT_BRIDGE_VERSION}, {"self", true} });
